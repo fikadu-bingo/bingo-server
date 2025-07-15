@@ -28,12 +28,16 @@ exports.buyTicket = async (req, res) => {
   }
 };
 
-// ✅ Add joinGame logic (new)
+// Join game
 exports.joinGame = async (req, res) => {
   try {
-    const { userId } = req.body;
+    const { telegramId, username } = req.body;
 
-    // Find an open game (for simplicity, using the latest)
+    if (!telegramId) {
+      return res.status(400).json({ message: "telegramId is required" });
+    }
+
+    // Find an active game (latest created)
     const game = await Game.findOne({
       order: [["createdAt", "DESC"]],
     });
@@ -42,9 +46,17 @@ exports.joinGame = async (req, res) => {
       return res.status(404).json({ message: "No active game found" });
     }
 
-    // You can create a ticket for the user or just confirm they joined
-    // Example: here we only confirm joining
-    res.json({ message: `Joined game ${game.gameCode} successfully!`, gameId: game.id });
+    // Example: you might generate a simple ticket number (here just random for now)
+    const ticketNumber = "T" + Math.floor(1000 + Math.random() * 9000);
+
+    // You can also store tickets in DB if needed:
+    // await Ticket.create({ userId: telegramId, gameId: game.id, numbers: [], cartela: "" });
+
+    res.json({
+      message: `Joined game ${game.gameCode} successfully!`,
+      gameId: game.id,
+      ticketNumber: ticketNumber,
+    });
   } catch (error) {
     console.error("Error joining game:", error);
     res.status(500).json({ message: "Failed to join game" });
