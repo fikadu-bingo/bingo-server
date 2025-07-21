@@ -3,9 +3,8 @@ const http = require("http");
 const { Server } = require("socket.io");
 const sequelize = require("./config/db");
 const cors = require("cors");
-const path = require("path"); // ✅ For serving static files
+const path = require("path");
 
-// Routes
 const authRoutes = require("./routes/auth");
 const gameRoutes = require("./routes/game");
 const userRoutes = require("./routes/user");
@@ -13,33 +12,45 @@ const agentRoutes = require("./routes/agentRoutes");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: "*", // 👉 Replace with your frontend URL for security if needed
-  },
-});
 
-// Middleware
-app.use(cors());
+// ✅ Replace this with your actual frontend domain
+const FRONTEND_ORIGIN = "https://bingo-telegram-web.vercel.app";
+
+// --------------------
+// ✅ Setup CORS
+// --------------------
+app.use(
+  cors({
+    origin: FRONTEND_ORIGIN,
+    credentials: true, // if using cookies/auth
+  })
+);
 app.use(express.json());
 
-// ✅ Serve uploaded receipts statically
+// ✅ Static files (for receipts)
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// Use API routes
+// API routes
 app.use("/api/auth", authRoutes);
 app.use("/api/game", gameRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/agent", agentRoutes);
 
-// Test endpoint
+// Root test route
 app.get("/", (req, res) => {
   res.send("✅ Bingo server is running!");
 });
 
 // --------------------
-// Socket.io logic
+// Socket.IO
 // --------------------
+const io = new Server(server, {
+  cors: {
+    origin: FRONTEND_ORIGIN,
+    methods: ["GET", "POST"],
+  },
+});
+
 const activeGames = {};
 
 io.on("connection", (socket) => {
@@ -100,7 +111,7 @@ io.on("connection", (socket) => {
 });
 
 // --------------------
-// Sync database and start server
+// Sync DB and Start Server
 // --------------------
 sequelize
   .sync({ alter: true })
