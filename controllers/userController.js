@@ -12,23 +12,25 @@ exports.telegramAuth = async (req, res) => {
   }
 
   try {
-    let user = await User.findOne({ where: { telegram_id } });
+    const stringTelegramId = String(telegram_id);
+
+    let user = await User.findOne({ where: { telegram_id: stringTelegramId } });
 
     if (user) {
       console.log("User already exists:", user.id);
       return res.status(200).json({ message: "Login successful", user });
+    } else {
+      const newUser = await User.create({
+        id: uuidv4(),
+        telegram_id: stringTelegramId,
+        phone_number,
+        username: username || `TG_${stringTelegramId}`,
+        balance: 0,
+      });
+
+      console.log("New user created:", newUser.id);
+      return res.status(201).json({ message: "User registered", user: newUser });
     }
-
-    const newUser = await User.create({
-      id: uuidv4(),
-      telegram_id,
-      phone_number,
-      username: username || `TG_${telegram_id}`,
-      balance: 0,
-    });
-
-    console.log("New user created:", newUser.id);
-    return res.status(201).json({ message: "User registered", user: newUser });
   } catch (error) {
     console.error("Telegram auth error:", error);
     return res.status(500).json({ message: "Internal server error", error: error.message });
@@ -43,7 +45,7 @@ exports.deposit = async (req, res) => {
   }
 
   try {
-    const user = await User.findOne({ where: { telegram_id } });
+    const user = await User.findOne({ where: { telegram_id: String(telegram_id) } });
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
@@ -66,7 +68,7 @@ exports.withdraw = async (req, res) => {
   }
 
   try {
-    const user = await User.findOne({ where: { telegram_id } });
+    const user = await User.findOne({ where: { telegram_id: String(telegram_id) } });
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
@@ -93,8 +95,8 @@ exports.transfer = async (req, res) => {
   }
 
   try {
-    const sender = await User.findOne({ where: { telegram_id: from_telegram_id } });
-    const receiver = await User.findOne({ where: { telegram_id: to_telegram_id } });
+    const sender = await User.findOne({ where: { telegram_id: String(from_telegram_id) } });
+    const receiver = await User.findOne({ where: { telegram_id: String(to_telegram_id) } });
 
     if (!sender || !receiver) {
       return res.status(404).json({ message: "Sender or receiver not found" });
