@@ -19,6 +19,10 @@ const User = sequelize.define("User", {
   username: {
     type: DataTypes.STRING,
   },
+  profile_picture: {
+    type: DataTypes.STRING, // Will store the URL or file ID from Telegram
+    allowNull: true,
+  },
   balance: {
     type: DataTypes.INTEGER,
     defaultValue: 0,
