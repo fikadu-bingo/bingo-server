@@ -1,10 +1,10 @@
 const { Sequelize } = require("sequelize");
 
-// Use full connection URL
-const sequelize = new Sequelize("postgresql://bingo_db_10lt_user:ojEnUBFUNKjESl8Xix8VzoyZQ5Kw0CKH@dpg-d1prgvmr433s73dmvn00-a/bingo_db_10lt", {
+// Replace these with your actual DB credentials
+const sequelize = new Sequelize("bingo_db", "postgres", "Qulfii@123", {
+  host: "localhost",
   dialect: "postgres",
-  protocol: "postgres",
-  logging: false,
+  logging: false, // disable SQL logs in console, set true if you want to debug
 });
 
 module.exports = sequelize;
