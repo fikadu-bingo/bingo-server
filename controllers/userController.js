@@ -17,23 +17,24 @@ exports.telegramAuth = async (req, res) => {
     if (user) {
       console.log("User already exists:", user.id);
       return res.status(200).json({ message: "Login successful", user });
-    } else {
-      const newUser = await User.create({
-        id: uuidv4(),
-        telegram_id,
-        phone_number,
-        username: username || `TG_${telegram_id}`,
-        balance: 0,
-      });
-
-      console.log("New user created:", newUser.id);
-      return res.status(201).json({ message: "User registered", user: newUser });
     }
+
+    const newUser = await User.create({
+      id: uuidv4(),
+      telegram_id,
+      phone_number,
+      username: username || `TG_${telegram_id}`,
+      balance: 0,
+    });
+
+    console.log("New user created:", newUser.id);
+    return res.status(201).json({ message: "User registered", user: newUser });
   } catch (error) {
     console.error("Telegram auth error:", error);
     return res.status(500).json({ message: "Internal server error", error: error.message });
   }
 };
+
 exports.deposit = async (req, res) => {
   const { telegram_id, amount } = req.body;
 
@@ -109,7 +110,11 @@ exports.transfer = async (req, res) => {
     await sender.save();
     await receiver.save();
 
-    res.status(200).json({ message: "Transfer successful", senderBalance: sender.balance, receiverBalance: receiver.balance });
+    res.status(200).json({
+      message: "Transfer successful",
+      senderBalance: sender.balance,
+      receiverBalance: receiver.balance,
+    });
   } catch (error) {
     console.error("Transfer error:", error);
     res.status(500).json({ message: "Internal server error" });
