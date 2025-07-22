@@ -1,10 +1,21 @@
 const { Sequelize } = require("sequelize");
+require("dotenv").config();
 
-// Replace these with your actual DB credentials
-const sequelize = new Sequelize("bingo_db", "postgres", "Qulfii@123", {
-  host: "localhost",
-  dialect: "postgres",
-  logging: false, // disable SQL logs in console, set true if you want to debug
-});
+const sequelize = process.env.DATABASE_URL
+  ? new Sequelize(process.env.DATABASE_URL, {
+      dialect: "postgres",
+      dialectOptions: {
+        ssl: {
+          require: true,
+          rejectUnauthorized: false,
+        },
+      },
+      logging: false,
+    })
+  : new Sequelize("bingo_db", "postgres", "Qulfii@123", {
+      host: "localhost",
+      dialect: "postgres",
+      logging: false,
+    });
 
 module.exports = sequelize;
