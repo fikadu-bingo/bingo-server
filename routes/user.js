@@ -5,26 +5,24 @@ const {
   deposit,
   withdraw,
   transfer,
+  getMe, // ✅ Added
 } = require("../controllers/userController");
 
-const { User } = require("../models"); // ✅ Import User model
+const { User } = require("../models");
 
 const router = express.Router();
 
 // Configure Multer for file uploads
-const storage = multer.memoryStorage(); // or use diskStorage if saving to disk
+const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
 // Routes
 router.post("/telegram-auth", telegramAuth);
-
-// If receipt is uploaded, expect receipt field from form-data
 router.post("/deposit", upload.single("receipt"), deposit);
-
 router.post("/withdraw", withdraw);
 router.post("/transfer", transfer);
 
-// ✅ Check if user exists by Telegram ID (for one-time phone request)
+// ✅ Check if user exists by Telegram ID
 router.get("/check/:telegram_id", async (req, res) => {
   try {
     const { telegram_id } = req.params;
@@ -39,5 +37,8 @@ router.get("/check/:telegram_id", async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 });
+
+// ✅ Get username and profile picture for frontend HomePage
+router.get("/me", getMe);
 
 module.exports = router;
