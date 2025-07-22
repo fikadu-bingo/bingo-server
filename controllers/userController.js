@@ -2,7 +2,7 @@ const { User } = require("../models");
 const { v4: uuidv4 } = require("uuid");
 
 exports.telegramAuth = async (req, res) => {
-  const { telegram_id, phone_number, username } = req.body;
+  const { telegram_id, phone_number, username, profile_picture } = req.body;
 
   console.log("Received Telegram Auth request:", req.body);
 
@@ -25,6 +25,7 @@ exports.telegramAuth = async (req, res) => {
         telegram_id: stringTelegramId,
         phone_number,
         username: username || `TG_${stringTelegramId}`,
+        profile_picture: profile_picture || null,
         balance: 0,
       });
 
@@ -119,6 +120,30 @@ exports.transfer = async (req, res) => {
     });
   } catch (error) {
     console.error("Transfer error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// ✅ NEW: Get user profile (username + profile_picture) using telegram_id
+exports.getMe = async (req, res) => {
+  const { telegram_id } = req.query;
+
+  if (!telegram_id) {
+    return res.status(400).json({ message: "telegram_id is required" });
+  }
+  try {
+    const user = await User.findOne({
+      where: { telegram_id: String(telegram_id) },
+      attributes: ["username", "profile_picture"],
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.status(200).json({ user });
+  } catch (error) {
+    console.error("getMe error:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
