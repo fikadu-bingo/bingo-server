@@ -48,14 +48,25 @@ exports.getDepositRequests = async (req, res) => {
 
 exports.approveDeposit = async (req, res) => {
   const { id } = req.body;
+
   try {
+    // Get deposit info (amount, user_id)
+    const result = await db.query("SELECT amount, user_id FROM deposits WHERE id = $1", [id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: "Deposit not found" });
+
+    const { amount, user_id } = result.rows[0];
+
+    // 1. Mark as approved
     await db.query("UPDATE deposits SET status = 'Approved' WHERE id = $1", [id]);
-    res.json({ message: "Deposit approved successfully" });
+
+    // 2. Add amount to user's balance
+    await db.query("UPDATE users SET balance = balance + $1 WHERE id = $2", [amount, user_id]);
+
+    res.json({ message: "Deposit approved and balance updated" });
   } catch (err) {
     res.status(500).json({ error: "Failed to approve deposit", details: err.message });
   }
 };
-
 exports.rejectDeposit = async (req, res) => {
   const { id } = req.body;
   try {
@@ -85,20 +96,30 @@ exports.approveCashout = (req, res) => {
     }
 
     const { id } = req.body;
-    const receiptUrl = req.file ?` /uploads/agent-receipts/${req.file.filename}` : null;
+    const receiptUrl = req.file ? `/uploads/agent-receipts/${req.file.filename}` : null;
 
     try {
+      // Get cashout info
+      const result = await db.query("SELECT amount, user_id FROM cashouts WHERE id = $1", [id]);
+      if (result.rows.length === 0) return res.status(404).json({ error: "Cashout not found" });
+
+      const { amount, user_id } = result.rows[0];
+
+      // 1. Mark as approved and save receipt
       await db.query(
         "UPDATE cashouts SET status = 'Approved', receipt_url = $1 WHERE id = $2",
         [receiptUrl, id]
       );
-      res.json({ message: "Cashout approved successfully", receiptUrl });
+
+      // 2. Deduct balance from user
+      await db.query("UPDATE users SET balance = balance - $1 WHERE id = $2", [amount, user_id]);
+
+      res.json({ message: "Cashout approved and balance updated", receiptUrl });
     } catch (err) {
       res.status(500).json({ error: "Failed to approve cashout", details: err.message });
     }
   });
 };
-
 exports.rejectCashout = async (req, res) => {
   const { id } = req.body;
   try {
