@@ -3,7 +3,7 @@ const User = require("./user");
 const Game = require("./game");
 const Ticket = require("./Ticket");
 const Deposit = require("./deposit");
-const Cashout = require("./cashout");
+//const Cashout = require("./cashout");
 const CalledNumber = require("./CalledNumber");
 // Define associations if needed
 User.hasMany(Ticket, { foreignKey: "user_id" });
