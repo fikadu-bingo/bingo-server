@@ -8,7 +8,7 @@ const Deposit = sequelize.define("Deposit", {
     primaryKey: true,
   },
   user_id: {
-    type: DataTypes.TEXT,
+    type: DataTypes.UUID,
     allowNull: false,
   },
   amount: {
