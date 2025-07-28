@@ -1,6 +1,6 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/db");
-const Game = require("./Game");
+const Game = require("./game");
 
 const CalledNumber = sequelize.define("CalledNumber", {
   id: {
