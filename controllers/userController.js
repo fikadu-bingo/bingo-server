@@ -45,7 +45,7 @@ exports.deposit = async (req, res) => {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    const telegram_id = req.headers["telegram-id"];
+    const telegram_id = req.headers["telegram_id"];
     if (!telegram_id) {
       return res.status(400).json({ message: "Missing telegram_id in header" });
     }
