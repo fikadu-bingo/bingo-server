@@ -1,5 +1,5 @@
 const Game = require("../models/game");
-const Ticket = require("../models/Ticket");
+const Ticket = require("../models/ticket");
 
 // Create game
 exports.createGame = async (req, res) => {
