@@ -12,8 +12,8 @@ Ticket.belongsTo(User, { foreignKey: "user_id" });
 User.hasMany(Deposit, { foreignKey: "user_id" });
 Deposit.belongsTo(User, { foreignKey: "user_id" });
 
-User.hasMany(Cashout, { foreignKey: "user_id" });
-Cashout.belongsTo(User, { foreignKey: "user_id" });
+//User.hasMany(Cashout, { foreignKey: "user_id" });
+//Cashout.belongsTo(User, { foreignKey: "user_id" });
 
 // Export all models
 module.exports = {
@@ -22,6 +22,6 @@ module.exports = {
   Game,
   Ticket,
   Deposit,
-  Cashout,
+ // Cashout,
   CalledNumber,
 };
