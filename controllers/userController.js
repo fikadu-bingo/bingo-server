@@ -40,6 +40,7 @@ exports.deposit = async (req, res) => {
   try {
     const { amount, phone } = req.body;
     const receipt = req.file;
+    console.log("📸 Uploaded file:", receipt);
     console.log("📥 Deposit endpoint hit with:", {
   amount,
   phone,
