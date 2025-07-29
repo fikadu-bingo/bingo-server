@@ -40,6 +40,12 @@ exports.deposit = async (req, res) => {
   try {
     const { amount, phone } = req.body;
     const receipt = req.file;
+    console.log("📥 Deposit endpoint hit with:", {
+  amount,
+  phone,
+  telegram_id: req.headers["telegram_id"],
+  file: req.file?.originalname,
+});
 
     if (!amount || !phone || !receipt) {
       return res.status(400).json({ message: "Missing required fields" });
