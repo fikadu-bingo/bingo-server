@@ -31,6 +31,7 @@ const Deposit = sequelize.define("Deposit", {
     type: DataTypes.DATE,
     defaultValue: DataTypes.NOW,
   },
+   tableName: "deposit"  //this forces Sequelize to use "deposit" as table name
 });
 
 module.exports = Deposit;
