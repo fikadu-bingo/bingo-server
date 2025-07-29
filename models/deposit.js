@@ -33,7 +33,7 @@ const Deposit = sequelize.define("Deposit", {
   },
     
     tableName: "deposit", // 👈 force lowercase + singular
-    freezeTableName: true, // 👈 prevent pluralization
+    
   
 });
 
