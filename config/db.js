@@ -10,12 +10,12 @@ const sequelize = process.env.DATABASE_URL
           rejectUnauthorized: false,
         },
       },
-      logging: false,
+      logging: (msg) => console.log("📄 Sequelize:", msg), // ✅ enable logging
     })
   : new Sequelize("bingo_db", "postgres", "Qulfii@123", {
       host: "localhost",
       dialect: "postgres",
-      logging: false,
+      logging: (msg) => console.log("📄 Sequelize:", msg), // ✅ enable logging
     });
 
 module.exports = sequelize;
