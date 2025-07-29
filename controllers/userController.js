@@ -64,15 +64,27 @@ exports.deposit = async (req, res) => {
 
     const receiptPath = `uploads/receipts/${receipt.filename}`;
 
-    await Deposit.create({
-      id: uuidv4(),
-      user_id: user.id,
-      amount: parseFloat(amount),
-      phone_number: phone,
-      receipt_url: receiptPath,
-      date: new Date(),
-      status: "pending",
-    });
+    console.log("✅ Creating deposit with:", {
+  id: uuidv4(),
+  user_id: user.id,
+  amount: parseFloat(amount),
+  phone_number: phone,
+  receipt_url: receiptPath,
+  date: new Date(),
+  status: "pending",
+});
+
+await Deposit.create({
+  id: uuidv4(),
+  user_id: user.id,
+  amount: parseFloat(amount),
+  phone_number: phone,
+  receipt_url: receiptPath,
+  date: new Date(),
+  status: "pending",
+});
+
+console.log("✅ Deposit successfully saved to DB");
 
     return res.status(201).json({ message: "Deposit request created" });
   } catch (error) {
