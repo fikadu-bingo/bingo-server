@@ -13,12 +13,11 @@ const { User } = require("../models");
 const router = express.Router();
 
 // Configure Multer for file uploads
-const storage = multer.memoryStorage();
-const upload = multer({ storage });
+const uploadMiddleware = require("../middleware/upload");
 
 // Routes
 router.post("/telegram-auth", telegramAuth);
-router.post("/deposit", upload.single("receipt"), deposit);
+router.post("/deposit", uploadMiddleware.single("receipt"), deposit);
 router.post("/withdraw", withdraw);
 router.post("/transfer", transfer);
 
