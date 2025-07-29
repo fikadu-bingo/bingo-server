@@ -62,7 +62,7 @@ exports.deposit = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    const receiptPath = `/uploads/receipts/${receipt.filename}`;
+    const receiptPath = `uploads/receipts/${receipt.filename}`;
 
     await Deposit.create({
       id: uuidv4(),
