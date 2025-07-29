@@ -1,5 +1,5 @@
 const { DataTypes } = require("sequelize");
-const sequelize = require("../config/db"); // adjust this path to your actual sequelize instance
+const sequelize = require("../config/db");
 
 const Deposit = sequelize.define("Deposit", {
   id: {
@@ -30,11 +30,10 @@ const Deposit = sequelize.define("Deposit", {
   date: {
     type: DataTypes.DATE,
     defaultValue: DataTypes.NOW,
-  },
-    
-    tableName: "deposit", // 👈 force lowercase + singular
-    
-  
+  }
+}, {
+  tableName: "Deposits", // Correct placement here
+  timestamps: true       // Adds createdAt and updatedAt automatically
 });
 
 module.exports = Deposit;
