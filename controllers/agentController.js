@@ -1,5 +1,3 @@
-// controllers/agentController.js
-
 const db = require("../config/db"); // PostgreSQL connection
 const multer = require("multer");
 const path = require("path");
@@ -35,21 +33,24 @@ exports.agentLogin = async (req, res) => {
 };
 
 // ---------------------------
-// Deposit Requests
+// Deposit Requests (Updated)
 // ---------------------------
 exports.getDepositRequests = async (req, res) => {
   try {
-    const result = await db.query('SELECT * FROM "Deposits" ORDER BY date DESC');
-    const formatted = result.rows.map((deposit) => ({
-      Id: deposit.id,
-      Username: deposit.username,
-      Amount: deposit.amount,
-      Phone: deposit.phone,
-      Receipt: deposit.receipt,
-      Timestamp: deposit.date, // or created_at depending on your column name
-      Status: deposit.status,
-    }));
-    res.json(formatted);
+    const result = await db.query(`
+      SELECT 
+        d.id AS "Id",
+        u.username AS "Username",
+        d.amount AS "Amount",
+        d.phone_number AS "Phone",
+        d.receipt_url AS "Receipt",
+        d.status AS "Status",
+        d.date AS "Timestamp"
+      FROM "Deposits" d
+      JOIN users u ON d.user_id = u.id
+      ORDER BY d.date DESC
+    `);
+    res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: "Error fetching deposits", details: err.message });
   }
@@ -59,16 +60,12 @@ exports.approveDeposit = async (req, res) => {
   const { id } = req.body;
 
   try {
-    // Get deposit info (amount, user_id)
     const result = await db.query('SELECT amount, user_id FROM "Deposits" WHERE id = $1', [id]);
     if (result.rows.length === 0) return res.status(404).json({ error: "Deposit not found" });
 
     const { amount, user_id } = result.rows[0];
 
-    // 1. Mark as approved
     await db.query('UPDATE "Deposits" SET status = \'Approved\' WHERE id = $1', [id]);
-
-    // 2. Add amount to user's balance
     await db.query("UPDATE users SET balance = balance + $1 WHERE id = $2", [amount, user_id]);
 
     res.json({ message: "Deposit approved and balance updated" });
@@ -106,20 +103,19 @@ exports.approveCashout = (req, res) => {
     }
 
     const { id } = req.body;
-    const receiptUrl = req.file ?` /uploads/agent-receipts/${req.file.filename}` : null;
+    const receiptUrl = req.file ? `/uploads/agent-receipts/${req.file.filename}` : null;
 
     try {
-      // Get cashout info
       const result = await db.query("SELECT amount, user_id FROM cashouts WHERE id = $1", [id]);
       if (result.rows.length === 0) return res.status(404).json({ error: "Cashout not found" });
 
       const { amount, user_id } = result.rows[0];
 
-      // 1. Mark as approved and save receipt
       await db.query(
         "UPDATE cashouts SET status = 'Approved', receipt_url = $1 WHERE id = $2",
         [receiptUrl, id]
-      );// 2. Deduct balance from user
+      );
+
       await db.query("UPDATE users SET balance = balance - $1 WHERE id = $2", [amount, user_id]);
 
       res.json({ message: "Cashout approved and balance updated", receiptUrl });
@@ -127,9 +123,7 @@ exports.approveCashout = (req, res) => {
       res.status(500).json({ error: "Failed to approve cashout", details: err.message });
     }
   });
-};
-
-exports.rejectCashout = async (req, res) => {
+};exports.rejectCashout = async (req, res) => {
   const { id } = req.body;
   try {
     await db.query("UPDATE cashouts SET status = 'Rejected' WHERE id = $1", [id]);
