@@ -90,9 +90,9 @@ exports.rejectDeposit = async (req, res) => {
 // ---------------------------
 exports.getCashoutRequests = async (req, res) => {
   try {
-    const result = await db.query('SELECT * FROM cashouts ORDER BY date DESC');
-    console.log("Cashouts fetched:", result.rows);
-    res.json({ cashouts: result.rows }); // ✅ this fixes the frontend map() issue
+    const [cashouts] = await db.query('SELECT * FROM cashouts ORDER BY date DESC');
+    console.log("Cashouts fetched:", cashouts); // ✅ Should log actual rows now
+    res.json({ cashouts });
   } catch (err) {
     console.error("Cashout error:", err);
     res.status(500).json({ error: "Error fetching cashouts", details: err.message });
