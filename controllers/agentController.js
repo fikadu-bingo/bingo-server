@@ -37,7 +37,7 @@ exports.agentLogin = async (req, res) => {
 // ---------------------------
 // Deposit Requests
 // ---------------------------
-const getDepositRequests = async (req, res) => {
+exports.getDepositRequests = async (req, res) => {
   try {
     const result = await db.query(`
       SELECT d.id, d.amount, d.phone_number, d.receipt_url, d.status, d.date, u.username
