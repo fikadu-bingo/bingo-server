@@ -37,23 +37,25 @@ exports.agentLogin = async (req, res) => {
 // ---------------------------
 // Deposit Requests
 // ---------------------------
+const { Deposit, User } = require("../models");
+
 exports.getDepositRequests = async (req, res) => {
   try {
-    const result = await db.query(`
-      SELECT d.id, d.amount, d.phone_number, d.receipt_url, d.status, d.date, u.username
-      FROM "Deposits" d
-      JOIN "Users" u ON d.user_id = u.id
-      WHERE d.status = 'pending'
-      ORDER BY d.date DESC
-    `);
+    const deposits = await Deposit.findAll({
+      where: { status: "pending" },
+      order: [["date", "DESC"]],
+      include: [
+        {
+          model: User,
+          attributes: ["username"], // include only the username from Users
+        },
+      ],
+    });
 
-    if (result && result.rows) {
-      return res.status(200).json({ deposits: result.rows }); // ✅ wrap in object
-    } else {
-      return res.status(200).json({ deposits: [] });
-    }
+    res.status(200).json({ deposits });
   } catch (err) {
-    return res.status(500).json({ error: "Error fetching deposits", details: err.message });
+    console.error("Error fetching deposits:", err);
+    res.status(500).json({ error: "Error fetching deposits", details: err.message });
   }
 };
 
