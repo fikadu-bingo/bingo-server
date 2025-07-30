@@ -1,3 +1,5 @@
+// controllers/agentController.js
+
 const db = require("../config/db"); // PostgreSQL connection
 const multer = require("multer");
 const path = require("path");
@@ -33,21 +35,14 @@ exports.agentLogin = async (req, res) => {
 };
 
 // ---------------------------
-// Deposit Requests (Updated)
+// Deposit Requests
 // ---------------------------
 exports.getDepositRequests = async (req, res) => {
   try {
     const result = await db.query(`
-      SELECT 
-        d.id AS "Id",
-        u.username AS "Username",
-        d.amount AS "Amount",
-        d.phone_number AS "Phone",
-        d.receipt_url AS "Receipt",
-        d.status AS "Status",
-        d.date AS "Timestamp"
+      SELECT d.id, d.amount, d.phone_number, d.receipt_url, d.status, d.date, u.username
       FROM "Deposits" d
-      JOIN users u ON d.user_id = u.id
+      JOIN "Users" u ON d.user_id = u.id
       ORDER BY d.date DESC
     `);
     res.json(result.rows);
@@ -65,8 +60,8 @@ exports.approveDeposit = async (req, res) => {
 
     const { amount, user_id } = result.rows[0];
 
-    await db.query('UPDATE "Deposits" SET status = \'Approved\' WHERE id = $1', [id]);
-    await db.query("UPDATE users SET balance = balance + $1 WHERE id = $2", [amount, user_id]);
+    await db.query('UPDATE "Deposits" SET status = $1 WHERE id = $2', ['Approved', id]);
+    await db.query('UPDATE "Users" SET balance = balance + $1 WHERE id = $2', [amount, user_id]);
 
     res.json({ message: "Deposit approved and balance updated" });
   } catch (err) {
@@ -77,7 +72,7 @@ exports.approveDeposit = async (req, res) => {
 exports.rejectDeposit = async (req, res) => {
   const { id } = req.body;
   try {
-    await db.query('UPDATE "Deposits" SET status = \'Rejected\' WHERE id = $1', [id]);
+    await db.query('UPDATE "Deposits" SET status = $1 WHERE id = $2', ['Rejected', id]);
     res.json({ message: "Deposit rejected successfully" });
   } catch (err) {
     res.status(500).json({ error: "Failed to reject deposit", details: err.message });
@@ -89,7 +84,7 @@ exports.rejectDeposit = async (req, res) => {
 // ---------------------------
 exports.getCashoutRequests = async (req, res) => {
   try {
-    const result = await db.query("SELECT * FROM cashouts ORDER BY date DESC");
+    const result = await db.query('SELECT * FROM cashouts ORDER BY date DESC');
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: "Error fetching cashouts", details: err.message });
@@ -116,14 +111,15 @@ exports.approveCashout = (req, res) => {
         [receiptUrl, id]
       );
 
-      await db.query("UPDATE users SET balance = balance - $1 WHERE id = $2", [amount, user_id]);
+      await db.query('UPDATE "Users" SET balance = balance - $1 WHERE id = $2', [amount, user_id]);
 
       res.json({ message: "Cashout approved and balance updated", receiptUrl });
     } catch (err) {
       res.status(500).json({ error: "Failed to approve cashout", details: err.message });
     }
   });
-};exports.rejectCashout = async (req, res) => {
+};
+exports.rejectCashout = async (req, res) => {
   const { id } = req.body;
   try {
     await db.query("UPDATE cashouts SET status = 'Rejected' WHERE id = $1", [id]);
