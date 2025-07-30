@@ -40,7 +40,16 @@ exports.agentLogin = async (req, res) => {
 exports.getDepositRequests = async (req, res) => {
   try {
     const result = await db.query('SELECT * FROM "Deposits" ORDER BY date DESC');
-    res.json(result.rows);
+    const formatted = result.rows.map((deposit) => ({
+      Id: deposit.id,
+      Username: deposit.username,
+      Amount: deposit.amount,
+      Phone: deposit.phone,
+      Receipt: deposit.receipt,
+      Timestamp: deposit.date, // or created_at depending on your column name
+      Status: deposit.status,
+    }));
+    res.json(formatted);
   } catch (err) {
     res.status(500).json({ error: "Error fetching deposits", details: err.message });
   }
@@ -51,13 +60,13 @@ exports.approveDeposit = async (req, res) => {
 
   try {
     // Get deposit info (amount, user_id)
-    const result = await db.query("SELECT amount, user_id FROM deposits WHERE id = $1", [id]);
+    const result = await db.query('SELECT amount, user_id FROM "Deposits" WHERE id = $1', [id]);
     if (result.rows.length === 0) return res.status(404).json({ error: "Deposit not found" });
 
     const { amount, user_id } = result.rows[0];
 
     // 1. Mark as approved
-    await db.query("UPDATE deposits SET status = 'Approved' WHERE id = $1", [id]);
+    await db.query('UPDATE "Deposits" SET status = \'Approved\' WHERE id = $1', [id]);
 
     // 2. Add amount to user's balance
     await db.query("UPDATE users SET balance = balance + $1 WHERE id = $2", [amount, user_id]);
@@ -67,10 +76,11 @@ exports.approveDeposit = async (req, res) => {
     res.status(500).json({ error: "Failed to approve deposit", details: err.message });
   }
 };
+
 exports.rejectDeposit = async (req, res) => {
   const { id } = req.body;
   try {
-    await db.query("UPDATE deposits SET status = 'Rejected' WHERE id = $1", [id]);
+    await db.query('UPDATE "Deposits" SET status = \'Rejected\' WHERE id = $1', [id]);
     res.json({ message: "Deposit rejected successfully" });
   } catch (err) {
     res.status(500).json({ error: "Failed to reject deposit", details: err.message });
@@ -96,7 +106,7 @@ exports.approveCashout = (req, res) => {
     }
 
     const { id } = req.body;
-    const receiptUrl = req.file ? `/uploads/agent-receipts/${req.file.filename}` : null;
+    const receiptUrl = req.file ?` /uploads/agent-receipts/${req.file.filename}` : null;
 
     try {
       // Get cashout info
@@ -109,9 +119,7 @@ exports.approveCashout = (req, res) => {
       await db.query(
         "UPDATE cashouts SET status = 'Approved', receipt_url = $1 WHERE id = $2",
         [receiptUrl, id]
-      );
-
-      // 2. Deduct balance from user
+      );// 2. Deduct balance from user
       await db.query("UPDATE users SET balance = balance - $1 WHERE id = $2", [amount, user_id]);
 
       res.json({ message: "Cashout approved and balance updated", receiptUrl });
@@ -120,6 +128,7 @@ exports.approveCashout = (req, res) => {
     }
   });
 };
+
 exports.rejectCashout = async (req, res) => {
   const { id } = req.body;
   try {
