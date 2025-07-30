@@ -43,6 +43,7 @@ exports.getDepositRequests = async (req, res) => {
       SELECT d.id, d.amount, d.phone_number, d.receipt_url, d.status, d.date, u.username
       FROM "Deposits" d
       JOIN "Users" u ON d.user_id = u.id
+      WHERE d.status = 'pending'
       ORDER BY d.date DESC
     `);
 
