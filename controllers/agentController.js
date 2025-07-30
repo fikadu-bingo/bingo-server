@@ -37,7 +37,11 @@ exports.agentLogin = async (req, res) => {
 // ---------------------------
 // Deposit Requests
 // ---------------------------
-const { Deposit, User } = require("../models");
+const Deposit = require("../models/deposit");
+const User = require("../models/user");
+
+// Define association (if not already done somewhere central)
+Deposit.belongsTo(User, { foreignKey: "user_id" });
 
 exports.getDepositRequests = async (req, res) => {
   try {
@@ -47,18 +51,27 @@ exports.getDepositRequests = async (req, res) => {
       include: [
         {
           model: User,
-          attributes: ["username"], // include only the username from Users
+          attributes: ["username"], // get only username from User
         },
       ],
     });
 
-    res.status(200).json({ deposits });
+    // Format response with user info merged
+    const formattedDeposits = deposits.map((dep) => ({
+      id: dep.id,
+      amount: dep.amount,
+      phone_number: dep.phone_number,
+      receipt_url: dep.receipt_url,
+      status: dep.status,
+      date: dep.date,
+      username: dep.User ? dep.User.username : null,
+    }));
+
+    res.status(200).json({ deposits: formattedDeposits });
   } catch (err) {
-    console.error("Error fetching deposits:", err);
     res.status(500).json({ error: "Error fetching deposits", details: err.message });
   }
 };
-
 exports.approveDeposit = async (req, res) => {
   const { id } = req.body;
 
