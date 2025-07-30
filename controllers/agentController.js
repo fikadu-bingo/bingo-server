@@ -37,7 +37,7 @@ exports.agentLogin = async (req, res) => {
 // ---------------------------
 // Deposit Requests
 // ---------------------------
-exports.getDepositRequests = async (req, res) => {
+const getDepositRequests = async (req, res) => {
   try {
     const result = await db.query(`
       SELECT d.id, d.amount, d.phone_number, d.receipt_url, d.status, d.date, u.username
@@ -45,9 +45,14 @@ exports.getDepositRequests = async (req, res) => {
       JOIN "Users" u ON d.user_id = u.id
       ORDER BY d.date DESC
     `);
-    res.json(result.rows);
+
+    if (result && result.rows) {
+      return res.status(200).json({ deposits: result.rows }); // ✅ wrap in object
+    } else {
+      return res.status(200).json({ deposits: [] });
+    }
   } catch (err) {
-    res.status(500).json({ error: "Error fetching deposits", details: err.message });
+    return res.status(500).json({ error: "Error fetching deposits", details: err.message });
   }
 };
 
