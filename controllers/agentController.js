@@ -39,7 +39,7 @@ exports.agentLogin = async (req, res) => {
 // ---------------------------
 exports.getDepositRequests = async (req, res) => {
   try {
-    const result = await db.query("SELECT * FROM deposits ORDER BY date DESC");
+    const result = await db.query('SELECT * FROM "Deposits" ORDER BY date DESC');
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: "Error fetching deposits", details: err.message });
