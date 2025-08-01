@@ -29,7 +29,7 @@ router.get("/check/:telegram_id", async (req, res) => {
     if (user) {
       res.status(200).json({ exists: true, user });
     } else {
-      res.status(404).json({ exists: false });
+      res.status(200).json({ exists: false });
     }
   } catch (error) {
     console.error("Check user error:", error.message);
