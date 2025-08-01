@@ -167,7 +167,7 @@ exports.getMe = async (req, res) => {
   try {
     const user = await User.findOne({
       where: { telegram_id: String(telegram_id) },
-      attributes: ["username", "profile_picture"],
+      attributes: ["username", "profile_picture","balance"],
     });
 
     if (!user) {
