@@ -74,18 +74,25 @@ exports.getDepositRequests = async (req, res) => {
 };
 exports.approveDeposit = async (req, res) => {
   const { id } = req.params;
+  console.log("🔧 Approving deposit ID:", id);
 
   try {
     const result = await db.query('SELECT amount, user_id FROM "Deposits" WHERE id = $1', [id]);
-    if (result.rows.length === 0) return res.status(404).json({ error: "Deposit not found" });
+
+    if (result.rows.length === 0) {
+      console.log("❌ Deposit not found for ID:", id);
+      return res.status(404).json({ error: "Deposit not found" });
+    }
 
     const { amount, user_id } = result.rows[0];
 
     await db.query('UPDATE "Deposits" SET status = $1 WHERE id = $2', ['Approved', id]);
     await db.query('UPDATE "Users" SET balance = balance + $1 WHERE id = $2', [amount, user_id]);
 
+    console.log("✅ Deposit approved and balance updated");
     res.json({ message: "Deposit approved and balance updated" });
   } catch (err) {
+    console.error("🔥 Error approving deposit:", err.message);
     res.status(500).json({ error: "Failed to approve deposit", details: err.message });
   }
 };
