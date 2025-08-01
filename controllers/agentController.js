@@ -73,7 +73,7 @@ exports.getDepositRequests = async (req, res) => {
   }
 };
 exports.approveDeposit = async (req, res) => {
-  const { id } = req.body;
+  const { id } = req.params;
 
   try {
     const result = await db.query('SELECT amount, user_id FROM "Deposits" WHERE id = $1', [id]);
