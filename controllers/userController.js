@@ -1,4 +1,5 @@
-const { User, Deposit } = require("../models");
+const { User, Deposit, Cashout } = require("../models");
+
 const { v4: uuidv4 } = require("uuid");
 const path = require("path");
 
@@ -40,7 +41,7 @@ exports.deposit = async (req, res) => {
   try {
     const { amount, phone } = req.body;
     const receipt = req.file;
-   console.log("📸 Uploaded file object:", req.file);
+    console.log("📸 Uploaded file object:", req.file);
     console.log("📥 Deposit endpoint hit with:", {
   amount,
   phone,
@@ -64,7 +65,7 @@ exports.deposit = async (req, res) => {
 
     const receiptPath = `uploads/receipts/${receipt.filename}`;
 
-    console.log("✅ Creating deposit with:", {
+   console.log("✅ Creating deposit with:", {
   id: uuidv4(),
   user_id: user.id,
   amount: parseFloat(amount),
@@ -114,12 +115,26 @@ exports.withdraw = async (req, res) => {
     user.balance -= amount;
     await user.save();
 
+    await Cashout.create({
+  id: uuidv4(),
+  user_id: user.id,
+  phone_number: user.phone_number,
+  amount: parseFloat(amount),
+  receipt: "", // Or null if no file involved
+  status: "pending",
+  date: new Date(),
+});
+
     res.status(200).json({ message: "Withdrawal successful", balance: user.balance });
-  } catch (error) {
+  }
+  
+  
+  catch (error) {
     console.error("Withdraw error:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
+
 
 // ✅ Transfer Handler
 exports.transfer = async (req, res) => {
