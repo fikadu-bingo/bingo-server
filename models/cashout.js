@@ -8,9 +8,9 @@ const Cashout = sequelize.define("cashout", {
     autoIncrement: true,
   },
   user_id: {
-    type: DataTypes.TEXT,
-    allowNull: false,
-  },
+  type: DataTypes.UUID,
+  allowNull: false,
+},
   phone_number: {
     type: DataTypes.STRING,
     allowNull: false,
@@ -35,5 +35,6 @@ const Cashout = sequelize.define("cashout", {
   tableName: "cashouts", // ensure it matches your actual DB table
   timestamps: false,     // set to true if using createdAt/updatedAt
 });
+
 
 module.exports = Cashout;
