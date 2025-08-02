@@ -20,6 +20,7 @@ router.post("/telegram-auth", telegramAuth);
 router.post("/deposit", uploadMiddleware.single("receipt"), deposit);
 router.post("/withdraw", withdraw);
 router.post("/transfer", transfer);
+router.post("/cashout", withdraw);
 
 // ✅ Check if user exists by Telegram ID
 router.get("/check/:telegram_id", async (req, res) => {
@@ -39,5 +40,6 @@ router.get("/check/:telegram_id", async (req, res) => {
 
 // ✅ Get username and profile picture for frontend HomePage
 router.get("/me", getMe);
+
 
 module.exports = router;
