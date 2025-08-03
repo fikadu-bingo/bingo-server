@@ -95,7 +95,7 @@ console.log("✅ Deposit successfully saved to DB");
 };
 
 // ✅ Withdraw Handler
-eexports.withdraw = async (req, res) => {
+exports.withdraw = async (req, res) => {
   const { telegram_id, amount, phone_number } = req.body;
 
   // ✅ Log: Incoming request data
@@ -207,4 +207,5 @@ exports.getMe = async (req, res) => {
     console.error("getMe error:", error);
     res.status(500).json({ message: "Internal server error" });
   }
+
 };
