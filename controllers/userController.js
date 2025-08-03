@@ -96,45 +96,45 @@ console.log("✅ Deposit successfully saved to DB");
 
 // ✅ Withdraw Handler
 exports.withdraw = async (req, res) => {
-  const { telegram_id, amount } = req.body;
+  const { telegram_id, amount, phone_number } = req.body;
 
   if (!telegram_id || !amount || amount <= 0) {
-    return res.status(400).json({ message: "Invalid request" });
+    return res.status(400).json({ success: false, message: "Invalid request" });
   }
 
   try {
     const user = await User.findOne({ where: { telegram_id: String(telegram_id) } });
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      return res.status(404).json({ success: false, message: "User not found" });
     }
 
     if (user.balance < amount) {
-      return res.status(400).json({ message: "Insufficient balance" });
+      return res.status(400).json({ success: false, message: "Insufficient balance" });
     }
 
     user.balance -= amount;
     await user.save();
 
     await Cashout.create({
-  id: uuidv4(),
-  user_id: user.id,
-  phone_number: user.phone_number,
-  amount: parseFloat(amount),
-  receipt: "", // Or null if no file involved
-  status: "pending",
-  date: new Date(),
-});
+      id: uuidv4(),
+      user_id: user.id,
+      phone_number: phone_number || user.phone_number,  // prefer passed phone number
+      amount: parseFloat(amount),
+      receipt: "",
+      status: "pending",
+      date: new Date(),
+    });
 
-    res.status(200).json({ message: "Withdrawal successful", balance: user.balance });
-  }
-  
-  
-  catch (error) {
+    return res.status(200).json({
+      success: true,
+      message: "Withdrawal successful",
+      balance: user.balance,
+    });
+  } catch (error) {
     console.error("Withdraw error:", error);
-    res.status(500).json({ message: "Internal server error" });
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
-
 
 // ✅ Transfer Handler
 exports.transfer = async (req, res) => {
