@@ -1,7 +1,7 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/db");
 
-const Cashout = sequelize.define("cashout", {
+const Cashout = sequelize.define("Cashout", {
   id: {
     type: DataTypes.INTEGER,
     primaryKey: true,
@@ -38,3 +38,4 @@ const Cashout = sequelize.define("cashout", {
 
 
 module.exports = Cashout;
+
