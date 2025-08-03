@@ -95,8 +95,11 @@ console.log("✅ Deposit successfully saved to DB");
 };
 
 // ✅ Withdraw Handler
-exports.withdraw = async (req, res) => {
+eexports.withdraw = async (req, res) => {
   const { telegram_id, amount, phone_number } = req.body;
+
+  // ✅ Log: Incoming request data
+  console.log("📥 Withdraw request received:", { telegram_id, amount, phone_number });
 
   if (!telegram_id || !amount || amount <= 0) {
     return res.status(400).json({ success: false, message: "Invalid request" });
@@ -104,34 +107,44 @@ exports.withdraw = async (req, res) => {
 
   try {
     const user = await User.findOne({ where: { telegram_id: String(telegram_id) } });
+
+    // ✅ Log: User lookup result
     if (!user) {
+      console.log("❌ User not found:", telegram_id);
       return res.status(404).json({ success: false, message: "User not found" });
     }
 
     if (user.balance < amount) {
+      console.log("❌ Insufficient balance for user:", user.id);
       return res.status(400).json({ success: false, message: "Insufficient balance" });
     }
 
     user.balance -= amount;
     await user.save();
 
-    await Cashout.create({
-     // id: uuidv4(),
+    // ✅ Log: Balance after deduction
+    console.log("💰 New balance after deduction:", user.balance);
+
+    const cashout = await Cashout.create({
       user_id: user.id,
-      phone_number: phone_number || user.phone_number,  // prefer passed phone number
+      phone_number: phone_number || user.phone_number,
       amount: parseFloat(amount),
       receipt: "",
       status: "pending",
       date: new Date(),
     });
-console.log("Cashout created successfully for user:", user.id);
+
+    // ✅ Log: Cashout successfully created
+    console.log("✅ Cashout created successfully:", cashout.toJSON());
+
     return res.status(200).json({
       success: true,
       message: "Withdrawal successful",
       balance: user.balance,
     });
+
   } catch (error) {
-    console.error("Withdraw error:", error);
+    console.error("🔥 Withdraw error:", error);
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
@@ -194,6 +207,4 @@ exports.getMe = async (req, res) => {
     console.error("getMe error:", error);
     res.status(500).json({ message: "Internal server error" });
   }
-
 };
-
