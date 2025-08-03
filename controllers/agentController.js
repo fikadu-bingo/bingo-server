@@ -116,7 +116,7 @@ exports.approveDeposit = async (req, res) => {
   }
 };
 exports.rejectDeposit = async (req, res) => {
-  const { id } = req.body;
+  const { id } = req.params;
   try {
     await db.query('UPDATE "Deposits" SET status = $1 WHERE id = $2', ['Rejected', id]);
     res.json({ message: "Deposit rejected successfully" });
@@ -145,7 +145,7 @@ exports.approveCashout = (req, res) => {
       return res.status(400).json({ error: "Upload failed", details: err.message });
     }
 
-    const { id } = req.body;
+    const { id } = req.params;
     const receiptUrl = req.file ? `/uploads/agent-receipts/${req.file.filename}` : null;
 
     try {
@@ -168,7 +168,7 @@ exports.approveCashout = (req, res) => {
   });
 };
 exports.rejectCashout = async (req, res) => {
-  const { id } = req.body;
+  const { id } = req.params;
   try {
     await db.query("UPDATE cashouts SET status = 'Rejected' WHERE id = $1", [id]);
     res.json({ message: "Cashout rejected successfully" });
@@ -176,3 +176,4 @@ exports.rejectCashout = async (req, res) => {
     res.status(500).json({ error: "Failed to reject cashout", details: err.message });
   }
 };
+
