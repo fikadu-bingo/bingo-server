@@ -2,6 +2,7 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const sequelize = require("./config/db");
+require("./models/cashout");
 const cors = require("cors");
 const path = require("path");
 
@@ -123,4 +124,5 @@ sequelize
   })
   .catch((err) => {
     console.error("❌ Failed to sync DB:", err);
+
   });
