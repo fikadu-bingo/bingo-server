@@ -130,10 +130,7 @@ exports.rejectDeposit = async (req, res) => {
 // ---------------------------
 exports.getCashoutRequests = async (req, res) => {
   try {
-    const [cashouts] = await db.query(`SELECT cashouts.*, users.username
-      FROM cashouts
-      JOIN users ON cashouts.user_id = users.id
-      ORDER BY cashouts.date DESC`);
+   const [cashouts] = await db.query('SELECT * FROM cashouts ORDER BY date DESC');
     console.log("Cashouts fetched:", cashouts); // ✅ Should log actual rows now
     res.json({ cashouts });
   } catch (err) {
@@ -179,5 +176,6 @@ exports.rejectCashout = async (req, res) => {
     res.status(500).json({ error: "Failed to reject cashout", details: err.message });
   }
 };
+
 
 
