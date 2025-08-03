@@ -124,7 +124,7 @@ exports.withdraw = async (req, res) => {
       status: "pending",
       date: new Date(),
     });
-
+console.log("Cashout created successfully for user:", user.id);
     return res.status(200).json({
       success: true,
       message: "Withdrawal successful",
@@ -196,3 +196,4 @@ exports.getMe = async (req, res) => {
   }
 
 };
+
