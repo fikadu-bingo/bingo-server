@@ -116,7 +116,7 @@ exports.withdraw = async (req, res) => {
     await user.save();
 
     await Cashout.create({
-      id: uuidv4(),
+     // id: uuidv4(),
       user_id: user.id,
       phone_number: phone_number || user.phone_number,  // prefer passed phone number
       amount: parseFloat(amount),
@@ -194,4 +194,5 @@ exports.getMe = async (req, res) => {
     console.error("getMe error:", error);
     res.status(500).json({ message: "Internal server error" });
   }
+
 };
