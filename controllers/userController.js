@@ -95,7 +95,7 @@ console.log("✅ Deposit successfully saved to DB");
 };
 
 // ✅ Withdraw Handler
-exports.withdraw = async (req, res) => {
+exports.cashout = async (req, res) => {
   const { telegram_id, amount, phone_number } = req.body;
 
   // ✅ Log: Incoming request data
@@ -209,3 +209,4 @@ exports.getMe = async (req, res) => {
   }
 
 };
+
