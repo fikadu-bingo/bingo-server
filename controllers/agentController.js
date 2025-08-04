@@ -152,32 +152,46 @@ exports.getCashoutRequests = async (req, res) => {
 exports.approveCashout = async (req, res) => {
   const { id } = req.params;
 
+  console.log("Received approveCashout request for ID:", id);
+
   if (!req.file) {
+    console.log("No file uploaded");
     return res.status(400).json({ error: "Receipt file is required" });
   }
 
   const receiptUrl = `/uploads/agent-receipts/${req.file.filename}`;
+  console.log("Generated receipt URL:", receiptUrl);
 
   try {
+    // Check if cashout request exists
     const result = await db.query("SELECT amount, user_id FROM cashouts WHERE id = $1", [id]);
+    console.log("Cashout lookup result:", result.rows);
+
     if (result.rows.length === 0) {
+      console.log("Cashout not found for ID:", id);
       return res.status(404).json({ error: "Cashout not found" });
     }
 
     const { amount, user_id } = result.rows[0];
+    console.log(`User ID: ${user_id}, Amount: ${amount}`);
 
-    await db.query(
+    // Update cashout record
+    const updateCashout = await db.query(
       "UPDATE cashouts SET status = 'Approved', receipt_url = $1 WHERE id = $2",
       [receiptUrl, id]
     );
+    console.log("Cashout status updated");
 
-    await db.query(
+    // Update user's balance
+    const updateBalance = await db.query(
       'UPDATE "Users" SET balance = balance - $1 WHERE id = $2',
       [amount, user_id]
     );
+    console.log("User balance updated");
 
     res.json({ message: "Cashout approved and balance updated", receiptUrl });
   } catch (err) {
+    console.error("Error during approveCashout:", err.message);
     res.status(500).json({ error: "Failed to approve cashout", details: err.message });
   }
 };
