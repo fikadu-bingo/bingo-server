@@ -10,6 +10,8 @@ const authRoutes = require("./routes/auth");
 const gameRoutes = require("./routes/game");
 const userRoutes = require("./routes/user");
 const agentRoutes = require("./routes/agentRoutes");
+const adminRoutes = require('./routes/admin');
+
 
 const app = express();
 const server = http.createServer(app);
@@ -36,6 +38,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/game", gameRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/agent", agentRoutes);
+app.use('/api', adminRoutes);
 
 // Root test route
 app.get("/", (req, res) => {
@@ -124,5 +127,4 @@ sequelize
   })
   .catch((err) => {
     console.error("❌ Failed to sync DB:", err);
-
   });
