@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const uploadMiddleware = require("../middleware/upload");
 
 const {
   agentLogin,
@@ -25,7 +26,9 @@ router.post("/deposit-requests/:id/reject", rejectDeposit);
 
 // Cashout requests
 router.get("/cashout-requests", getCashoutRequests);
-router.post("/cashout-requests/:id/approve", approveCashout);
+
+
+router.post("/cashout-requests/:id/approve", uploadMiddleware.single("receipt"), approveCashout);
 router.post("/cashout-requests/:id/reject", rejectCashout); // Optional: for rejecting
 
 module.exports = router;
