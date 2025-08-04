@@ -4,7 +4,7 @@ const path = require("path");
 // Set up disk storage
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, "uploads/receipts");
+   cb(null, "uploads/agent-receipts");
   },
   filename: function (req, file, cb) {
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
@@ -24,5 +24,6 @@ const fileFilter = (req, file, cb) => {
 };
 
 const upload = multer({ storage, fileFilter });
+
 
 module.exports = upload;
