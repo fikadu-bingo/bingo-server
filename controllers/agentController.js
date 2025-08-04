@@ -51,7 +51,7 @@ exports.getDepositRequests = async (req, res) => {
       include: [
         {
           model: User,
-          attributes: ["username"], // get only username from User
+          attributes: ["username","phone_number"], // get only username from User
         },
       ],
     });
@@ -72,6 +72,7 @@ exports.getDepositRequests = async (req, res) => {
     res.status(500).json({ error: "Error fetching deposits", details: err.message });
   }
 };
+
 exports.approveDeposit = async (req, res) => {
   const { id } = req.params;
   console.log("🔧 Approving deposit ID:", id);
@@ -115,6 +116,7 @@ exports.approveDeposit = async (req, res) => {
     res.status(500).json({ error: "Failed to approve deposit", details: err.message });
   }
 };
+
 exports.rejectDeposit = async (req, res) => {
   const { id } = req.params;
   try {
@@ -147,34 +149,37 @@ exports.getCashoutRequests = async (req, res) => {
   }
 };
 
+exports.approveCashout = async (req, res) => {
+  const { id } = req.params;
 
-exports.approveCashout = (req, res) => {
-  upload(req, res, async function (err) {
-    if (err) {
-      return res.status(400).json({ error: "Upload failed", details: err.message });
+  if (!req.file) {
+    return res.status(400).json({ error: "Receipt file is required" });
+  }
+
+  const receiptUrl = `/uploads/agent-receipts/${req.file.filename}`;
+
+  try {
+    const result = await db.query("SELECT amount, user_id FROM cashouts WHERE id = $1", [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Cashout not found" });
     }
 
-    const { id } = req.params;
-    const receiptUrl = req.file ? `/uploads/agent-receipts/${req.file.filename}` : null;
+    const { amount, user_id } = result.rows[0];
 
-    try {
-      const result = await db.query("SELECT amount, user_id FROM cashouts WHERE id = $1", [id]);
-      if (result.rows.length === 0) return res.status(404).json({ error: "Cashout not found" });
+    await db.query(
+      "UPDATE cashouts SET status = 'Approved', receipt_url = $1 WHERE id = $2",
+      [receiptUrl, id]
+    );
 
-      const { amount, user_id } = result.rows[0];
+    await db.query(
+      'UPDATE "Users" SET balance = balance - $1 WHERE id = $2',
+      [amount, user_id]
+    );
 
-      await db.query(
-        "UPDATE cashouts SET status = 'Approved', receipt_url = $1 WHERE id = $2",
-        [receiptUrl, id]
-      );
-
-      await db.query('UPDATE "Users" SET balance = balance - $1 WHERE id = $2', [amount, user_id]);
-
-      res.json({ message: "Cashout approved and balance updated", receiptUrl });
-    } catch (err) {
-      res.status(500).json({ error: "Failed to approve cashout", details: err.message });
-    }
-  });
+    res.json({ message: "Cashout approved and balance updated", receiptUrl });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to approve cashout", details: err.message });
+  }
 };
 exports.rejectCashout = async (req, res) => {
   const { id } = req.params;
@@ -185,7 +190,3 @@ exports.rejectCashout = async (req, res) => {
     res.status(500).json({ error: "Failed to reject cashout", details: err.message });
   }
 };
-
-
-
-
