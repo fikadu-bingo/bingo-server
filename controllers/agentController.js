@@ -38,7 +38,7 @@ exports.agentLogin = async (req, res) => {
 // Deposit Requests
 // ---------------------------
 const Deposit = require("../models/deposit");
-const User = require("../models/user");
+
 
 // Define association (if not already done somewhere central)
 Deposit.belongsTo(User, { foreignKey: "user_id" });
@@ -204,7 +204,11 @@ exports.approveCashout = async (req, res) => {
 exports.rejectCashout = async (req, res) => {
   const { id } = req.params;
   try {
-    await db.query("UPDATE cashouts SET status = 'Rejected' WHERE id = $1", [id]);
+    const cashout = await Cashout.findByPk(id);
+if (!cashout) {
+  return res.status(404).json({ error: "Cashout not found" });
+}
+await cashout.update({ status: "Rejected" });
     res.json({ message: "Cashout rejected successfully" });
   } catch (err) {
     res.status(500).json({ error: "Failed to reject cashout", details: err.message });
