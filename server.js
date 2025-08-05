@@ -5,7 +5,7 @@ const sequelize = require("./config/db");
 require("./models/cashout");
 const cors = require("cors");
 const path = require("path");
-
+const adminRoutes = require("./routes/adminRoutes");
 const authRoutes = require("./routes/auth");
 const gameRoutes = require("./routes/game");
 const userRoutes = require("./routes/user");
@@ -39,7 +39,8 @@ app.use("/api/auth", authRoutes);
 app.use("/api/game", gameRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/agent", agentRoutes);
-app.use('/api', adminRoutes);
+
+app.use("/api/admin", adminRoutes);
 app.use('/api/agent', agentAuthRoutes);  // login
 
 // Root test route
