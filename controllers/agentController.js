@@ -30,7 +30,7 @@ const upload = multer({ storage }).single("receipt");
 exports.agentLogin = async (req, res) => {
   const { username, password } = req.body;
 
-  if (username === "agent" && password === "1234") {
+  if (username === "agent" && password === "123456") {
     // Create payload (you can add more info if needed)
     const payload = { username };
 
@@ -225,4 +225,5 @@ await cashout.update({ status: "Rejected" });
   }
 
 };
+
 
