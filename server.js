@@ -11,6 +11,7 @@ const gameRoutes = require("./routes/game");
 const userRoutes = require("./routes/user");
 const agentRoutes = require("./routes/agentRoutes");
 const adminRoutes = require('./routes/admin');
+const agentAuthRoutes = require('./routes/agent');   // new authentication route
 
 
 const app = express();
@@ -39,6 +40,7 @@ app.use("/api/game", gameRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/agent", agentRoutes);
 app.use('/api', adminRoutes);
+app.use('/api/agent', agentAuthRoutes);  // login
 
 // Root test route
 app.get("/", (req, res) => {
