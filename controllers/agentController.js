@@ -28,9 +28,16 @@ exports.agentLogin = async (req, res) => {
   const { username, password } = req.body;
 
   if (username === "agent" && password === "1234") {
-    res.json({ success: true, message: "Login successful" });
+    // Create payload (you can add more info if needed)
+    const payload = { username };
+
+    // Generate token (expires in 1 day for example)
+    const token = jwt.sign(payload, SECRET_KEY, { expiresIn: "1d" });
+
+    // Return success + token
+    return res.json({ success: true, token, message: "Login successful" });
   } else {
-    res.status(401).json({ success: false, message: "Invalid credentials" });
+    return res.status(401).json({ success: false, message: "Invalid credentials" });
   }
 };
 
@@ -213,4 +220,5 @@ await cashout.update({ status: "Rejected" });
   } catch (err) {
     res.status(500).json({ error: "Failed to reject cashout", details: err.message });
   }
+
 };
