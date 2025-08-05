@@ -10,7 +10,7 @@ const authRoutes = require("./routes/auth");
 const gameRoutes = require("./routes/game");
 const userRoutes = require("./routes/user");
 const agentRoutes = require("./routes/agentRoutes");
-const adminRoutes = require('./routes/admin');
+
 const agentAuthRoutes = require('./routes/agent');   // new authentication route
 
 
@@ -130,4 +130,5 @@ sequelize
   })
   .catch((err) => {
     console.error("❌ Failed to sync DB:", err);
+
   });
