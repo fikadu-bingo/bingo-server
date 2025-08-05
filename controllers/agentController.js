@@ -5,6 +5,9 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 
+const jwt = require("jsonwebtoken");
+const SECRET_KEY = "agent_secret_key"; // same as in your middleware
+
 // ---------------------------
 // Multer setup for receipt upload
 // ---------------------------
@@ -222,3 +225,4 @@ await cashout.update({ status: "Rejected" });
   }
 
 };
+
