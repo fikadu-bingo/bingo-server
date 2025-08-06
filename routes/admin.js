@@ -1,9 +1,10 @@
-// routes/admin.js (or user.js or agent.js depending on your structure)
 const express = require('express');
 const router = express.Router();
 const Agent = require('../models/Agent');
+const PromoCode = require('../models/promocode');
 const bcrypt = require('bcrypt');
 
+// Route to create an agent
 router.post('/agent', async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -29,6 +30,33 @@ router.post('/agent', async (req, res) => {
     res.status(201).json({ message: 'Agent created successfully', agent: { id: newAgent.id, username: newAgent.username } });
   } catch (error) {
     console.error('Create agent error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Route to create a promo code
+router.post('/promocode', async (req, res) => {
+  try {
+    const { code, commission } = req.body;
+
+    if (!code || commission == null) {
+      return res.status(400).json({ error: 'Code and commission are required' });
+    }
+
+    // Check if promo code already exists
+    const existingCode = await PromoCode.findOne({ where: { code } });
+    if (existingCode) {
+      return res.status(400).json({ error: 'Promo code already exists' });
+    }
+
+    const newPromo = await PromoCode.create({
+      code,
+      commission,
+    });
+
+    res.status(201).json({ message: 'Promo code created successfully', promoCode: newPromo });
+  } catch (error) {
+    console.error('Create promo code error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
