@@ -3,6 +3,7 @@ const http = require("http");
 const { Server } = require("socket.io");
 const sequelize = require("./config/db");
 require("./models/cashout");
+require("./models/promocode"); 
 const cors = require("cors");
 const path = require("path");
 const adminRoutes = require("./routes/adminRoutes");
@@ -10,6 +11,7 @@ const authRoutes = require("./routes/auth");
 const gameRoutes = require("./routes/game");
 const userRoutes = require("./routes/user");
 const agentRoutes = require("./routes/agentRoutes");
+const promocodeRoutes = require('./routes/promocode');
 
 const agentAuthRoutes = require('./routes/agent');   // new authentication route
 
@@ -42,6 +44,7 @@ app.use("/api/agent", agentRoutes);
 
 app.use("/api/admin", adminRoutes);
 app.use('/api/agent', agentAuthRoutes);  // login
+app.use('/api/promocode', promocodeRoutes);
 
 // Root test route
 app.get("/", (req, res) => {
@@ -130,5 +133,4 @@ sequelize
   })
   .catch((err) => {
     console.error("❌ Failed to sync DB:", err);
-
   });
