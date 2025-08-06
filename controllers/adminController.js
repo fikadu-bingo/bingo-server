@@ -7,8 +7,8 @@ exports.adminLogin = async (req, res) => {
   const { username, password } = req.body;
 
   // Example hardcoded admin — later store in DB
-  const adminUsername = "admin";
-  const adminPasswordHash = await bcrypt.hash("2468", 10);
+  const adminUsername = "Admin";
+  const adminPasswordHash = await bcrypt.hash("8765", 10);
 
   if (username !== adminUsername) {
     return res.status(401).json({ success: false, message: "Invalid credentials" });
@@ -37,4 +37,5 @@ exports.getStats = async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: "Error fetching stats" });
   }
+
 };
