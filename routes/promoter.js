@@ -1,8 +1,7 @@
-// routes/promoter.js
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
-const { Promocode, User } = require('../models'); // Adjust if your user model is different
+const { promocode, User } = require('../models'); // Make sure this matches your models export
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret';
 
@@ -16,7 +15,8 @@ router.post('/login', async (req, res) => {
   }
 
   try {
-    const promo = await Promocode.findOne({ where: { code: promo_code } });
+    // Use 'promocode' here exactly as imported
+    const promo = await promocode.findOne({ where: { code: promo_code } });
     console.log('Promo found:', promo); // ✅ log found promo
 
     if (!promo) {
@@ -42,7 +42,7 @@ router.get('/me', async (req, res) => {
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
 
-    const promo = await Promocode.findByPk(decoded.id);
+    const promo = await promocode.findByPk(decoded.id);
     if (!promo) return res.status(404).json({ message: 'Promocode not found' });
 
     res.json({
