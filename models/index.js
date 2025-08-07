@@ -5,6 +5,7 @@ const Ticket = require("./Ticket");
 const Deposit = require("./deposit");
 const Cashout = require("./cashout");
 const CalledNumber = require("./CalledNumber");
+const Promocode = require('./promocode');
 // Define associations if needed
 User.hasMany(Ticket, { foreignKey: "user_id" });
 Ticket.belongsTo(User, { foreignKey: "user_id" });
@@ -24,4 +25,5 @@ module.exports = {
   Deposit,
   Cashout,
   CalledNumber,
+   Promocode
 };
