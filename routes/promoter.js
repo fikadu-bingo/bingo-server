@@ -9,6 +9,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret';
 // Login: promoter enters their promo code only
 router.post('/login', async (req, res) => {
   const { promo_code } = req.body;
+  console.log('Received promo_code:', promo_code); // ✅ log received value
 
   if (!promo_code) {
     return res.status(400).json({ message: 'Promo code is required' });
@@ -16,13 +17,13 @@ router.post('/login', async (req, res) => {
 
   try {
     const promo = await Promocode.findOne({ where: { code: promo_code } });
+    console.log('Promo found:', promo); // ✅ log found promo
 
     if (!promo) {
       return res.status(401).json({ message: 'Invalid promo code' });
     }
 
     const token = jwt.sign({ id: promo.id, code: promo.code }, JWT_SECRET, { expiresIn: '7d' });
-
     res.json({ token, code: promo.code });
   } catch (error) {
     console.error('Promoter login error:', error);
