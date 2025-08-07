@@ -12,6 +12,7 @@ const gameRoutes = require("./routes/game");
 const userRoutes = require("./routes/user");
 const agentRoutes = require("./routes/agentRoutes");
 const promocodeRoutes = require('./routes/promocode');
+const promoterRoutes = require('./routes/promoter');
 
 const agentAuthRoutes = require('./routes/agent');   // new authentication route
 
@@ -45,6 +46,7 @@ app.use("/api/agent", agentRoutes);
 app.use("/api/admin", adminRoutes);
 app.use('/api/agent', agentAuthRoutes);  // login
 app.use('/api/promocode', promocodeRoutes);
+app.use('/api/promoter', promoterRoutes);
 
 // Root test route
 app.get("/", (req, res) => {
