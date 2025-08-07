@@ -37,17 +37,18 @@ exports.telegramAuth = async (req, res) => {
 };
 
 // ✅ Deposit Handler with File Upload
+// ✅ Deposit Handler with File Upload
 exports.deposit = async (req, res) => {
   try {
     const { amount, phone } = req.body;
     const receipt = req.file;
     console.log("📸 Uploaded file object:", req.file);
     console.log("📥 Deposit endpoint hit with:", {
-  amount,
-  phone,
-  telegram_id: req.headers["telegram_id"],
-  file: req.file?.originalname,
-});
+      amount,
+      phone,
+      telegram_id: req.headers["telegram_id"],
+      file: req.file?.originalname,
+    });
 
     if (!amount || !phone || !receipt) {
       return res.status(400).json({ message: "Missing required fields" });
@@ -58,34 +59,36 @@ exports.deposit = async (req, res) => {
       return res.status(400).json({ message: "Missing telegram_id in header" });
     }
 
-    const user = await User.findOne({ where: { telegram_id: String(telegram_id) } });
+    let user = await User.findOne({ where: { telegram_id: String(telegram_id) } });
+
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      user = await User.create({ telegram_id: String(telegram_id), balance: 0 });
+      console.log("✅ New user created automatically:", user.id);
     }
 
     const receiptPath = `uploads/receipts/${receipt.filename}`;
 
-   console.log("✅ Creating deposit with:", {
-  id: uuidv4(),
-  user_id: user.id,
-  amount: parseFloat(amount),
-  phone_number: phone,
-  receipt_url: receiptPath,
-  date: new Date(),
-  status: "pending",
-});
+    console.log("✅ Creating deposit with:", {
+      id: uuidv4(),
+      user_id: user.id,
+      amount: parseFloat(amount),
+      phone_number: phone,
+      receipt_url: receiptPath,
+      date: new Date(),
+      status: "pending",
+    });
 
-await Deposit.create({
-  id: uuidv4(),
-  user_id: user.id,
-  amount: parseFloat(amount),
-  phone_number: phone,
-  receipt_url: receiptPath,
-  date: new Date(),
-  status: "pending",
-});
+    await Deposit.create({
+      id: uuidv4(),
+      user_id: user.id,
+      amount: parseFloat(amount),
+      phone_number: phone,
+      receipt_url: receiptPath,
+      date: new Date(),
+      status: "pending",
+    });
 
-console.log("✅ Deposit successfully saved to DB");
+    console.log("✅ Deposit successfully saved to DB");
 
     return res.status(201).json({ message: "Deposit request created" });
   } catch (error) {
@@ -93,6 +96,8 @@ console.log("✅ Deposit successfully saved to DB");
     res.status(500).json({ message: "Internal server error", error: error.message });
   }
 };
+
+  
 
 // ✅ Withdraw Handler
 exports.cashout = async (req, res) => {
@@ -207,6 +212,5 @@ exports.getMe = async (req, res) => {
     console.error("getMe error:", error);
     res.status(500).json({ message: "Internal server error" });
   }
-
 };
 
