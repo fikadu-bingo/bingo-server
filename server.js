@@ -1,4 +1,3 @@
-// server.js
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -73,9 +72,10 @@ function createGame(gameId, stake = 0) {
       tickets: {}, // { userId: [numbers...] }
       numbersCalled: [],
       state: "waiting", // waiting | countdown | started | ended
-      countdown: 50, // default countdown seconds (you can change)
+      countdown: 50, // default countdown seconds
       stakePerPlayer: stake || 0,
       intervalId: null,
+      currentCountdown: 50, // track current countdown value for sync
     };
   }
 }
@@ -93,7 +93,7 @@ function broadcastPlayerInfo(gameId) {
   io.to(gameId).emit("playerListUpdated", { players, count });
   io.to(gameId).emit("playerCountUpdate", count);
 
-  // Optional global broadcast so homepage can listen and display counts for multiple stakes
+  // Global broadcast for homepage to show counts of all games
   io.emit("stakePlayerCount", { gameId, count });
 }
 
@@ -106,7 +106,7 @@ function broadcastWinAmount(gameId) {
   const stake = Number(game.stakePerPlayer) || 0;
   const totalStake = stake * game.players.length;
   const winAmount = Math.floor(totalStake * 0.8); // 80% rule (rounded down)
-  io.to(gameId).emit("winAmountUpdate", { winAmount, totalStake, stakePerPlayer: stake });
+  io.to(gameId).emit("winAmountUpdate", winAmount);
 }
 
 /**
@@ -119,6 +119,7 @@ function startCountdown(gameId) {
 
   game.state = "countdown";
   let counter = typeof game.countdown === "number" ? game.countdown : 50;
+  game.currentCountdown = counter; // set current countdown
 
   game.intervalId = setInterval(() => {
     // Ensure game still exists
@@ -130,21 +131,20 @@ function startCountdown(gameId) {
     // Broadcast current countdown
     io.to(gameId).emit("countdownUpdate", counter);
 
+    game.currentCountdown = counter; // update current countdown
+
     // Decrement
     counter -= 1;// If counter < 0, finish countdown and start game
     if (counter < 0) {
       clearInterval(game.intervalId);
       game.intervalId = null;
       game.state = "started";
-      // store zero for final value and broadcast
+      game.currentCountdown = 0;
+      // Broadcast countdown zero and game started event
       io.to(gameId).emit("countdownUpdate", 0);
       io.to(gameId).emit("gameStarted");
-      // At game start you may want to set a new countdown for the round itself or leave it be
     }
   }, 1000);
-
-  // Save back (in case)
-  game.intervalId = game.intervalId;
 }
 
 /**
@@ -159,7 +159,8 @@ function stopAndResetCountdown(gameId) {
   }
   game.state = "waiting";
   game.countdown = 50;
-  io.to(gameId).emit("countdownStopped", game.countdown);
+  game.currentCountdown = 50;
+  io.to(gameId).emit("countdownStopped", game.currentCountdown);
 }
 
 io.on("connection", (socket) => {
@@ -185,7 +186,7 @@ io.on("connection", (socket) => {
     // Remove previous entry for same user (handle reconnect)
     game.players = game.players.filter((p) => p.userId !== userId);
 
-    // Add current
+    // Add current player
     game.players.push({ socketId: socket.id, userId, username });
 
     socket.join(gameId);
@@ -198,7 +199,13 @@ io.on("connection", (socket) => {
     // Start countdown once we have at least 2 players and game is waiting
     if (game.players.length >= 2 && game.state === "waiting") {
       startCountdown(gameId);
+    } else if (game.state === "countdown") {
+      // If countdown already started, send current countdown to new user
+      socket.emit("countdownUpdate", game.currentCountdown);
     }
+
+    // Also emit current game state to new user
+    socket.emit("gameStateUpdate", { state: game.state, countdown: game.currentCountdown });
   });
 
   // --- Leave a game explicitly
@@ -207,7 +214,7 @@ io.on("connection", (socket) => {
     if (!gameId || !activeGames[gameId]) return;
     const game = activeGames[gameId];
 
-    // Remove by socketId or by userId if provided
+    // Remove player by socketId or userId if provided
     game.players = game.players.filter((p) => p.socketId !== socket.id && p.userId !== userId);
     socket.leave(gameId);
 
@@ -245,9 +252,7 @@ io.on("connection", (socket) => {
 
     // Broadcast the ticket map to all players in the room
     io.to(gameId).emit("ticketNumbersUpdated", game.tickets);
-  });
-
-  // --- Caller calls a number
+  });// --- Caller calls a number
   socket.on("callNumber", ({ gameId, number } = {}) => {
     if (!gameId || !activeGames[gameId]) return;
     const game = activeGames[gameId];
@@ -260,7 +265,8 @@ io.on("connection", (socket) => {
   // --- Player wins
   socket.on("bingoWin", ({ gameId, userId } = {}) => {
     if (!gameId || !activeGames[gameId]) return;
-    const game = activeGames[gameId];game.state = "ended";
+    const game = activeGames[gameId];
+    game.state = "ended";
     io.to(gameId).emit("gameWon", { userId });
 
     // Stop any running interval
