@@ -1,4 +1,3 @@
-// server.js (single-game mode)
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -79,12 +78,11 @@ const currentGame = {
 // Utility: broadcast player info to room & homepage
 function broadcastPlayerInfo() {
   const players = currentGame.players;
-  const count = players.length;
-  io.to(GAME_ROOM).emit("playerListUpdated", { players, count });
-  io.to(GAME_ROOM).emit("playerCountUpdate", count);
+  io.to(GAME_ROOM).emit("playerListUpdated", { players });
+  io.to(GAME_ROOM).emit("playerCountUpdate", players.length);
 
   // Broadcast global stake/player info for homepage compatibility
-  io.emit("stakePlayerCount", { gameId: GAME_ROOM, count });
+  io.emit("stakePlayerCount", { gameId: GAME_ROOM, count: players.length });
 }
 
 // Utility: broadcast win amount (80% of collected stakes)
@@ -117,7 +115,6 @@ function startCountdownIfNeeded() {
       io.to(GAME_ROOM).emit("countdownStopped", currentGame.currentCountdown);
       return;
     }
-
     counter -= 1;
     currentGame.currentCountdown = counter;
     // broadcast updated value
@@ -208,7 +205,7 @@ function resetGame() {
   stopCallingNumbers();
   stopAndResetCountdown();
 
-  // Clear state
+  // Clear state except players (keep empty)
   currentGame.players = [];
   currentGame.tickets = {};
   currentGame.numbersCalled = [];
@@ -245,6 +242,7 @@ io.on("connection", (socket) => {
 
     socket.join(GAME_ROOM);
     console.log(`✅ User ${userId} (${socket.id}) joined ${GAME_ROOM}`);
+
     // Broadcast updates
     broadcastPlayerInfo();
     broadcastWinAmount();
