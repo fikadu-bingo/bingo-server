@@ -2,7 +2,7 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const sequelize = require("./config/db");
-const { User } = require("./models"); // Make sure User model exports correctly
+const { User } = require("./models");
 require("./models/cashout");
 require("./models/promocode");
 const cors = require("cors");
@@ -21,7 +21,7 @@ const app = express();
 const server = http.createServer(app);
 
 // Replace with your frontend origin or use env var
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "https://bingo-telegram-web.vercel.app";
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN  || "https://bingo-telegram-web.vercel.app";
 
 // --------------------
 // Setup CORS & body parser
@@ -96,17 +96,41 @@ function broadcastPlayerInfo() {
   const players = currentGame.players;
   io.to(GAME_ROOM).emit("playerListUpdated", { players });
   io.to(GAME_ROOM).emit("playerCountUpdate", players.length);
-
-  // Broadcast global stake/player info for homepage compatibility
-  io.emit("stakePlayerCount", { gameId: GAME_ROOM, count: players.length });
 }
 
 // Utility: broadcast win amount (80% of collected stakes)
 function broadcastWinAmount() {
-  const stake = Number(currentGame.stakePerPlayer) || 0;
+  const stake = Number(currentGame.stakePerPlayer)  || 0;
   const totalStake = stake * currentGame.players.length;
   const winAmount = Math.floor(totalStake * 0.8);
   io.to(GAME_ROOM).emit("winAmountUpdate", winAmount);
+}
+
+// Utility to check if a user has Bingo (full row, column, or diagonal)
+function checkBingo(ticket) {
+  const rows = ticket;
+  const cols = [];
+  const diagonals = [[], []];
+
+  // Prepare column data and diagonals
+  for (let i = 0; i < 5; i++) {
+    cols[i] = [];
+    for (let j = 0; j < 5; j++) {
+      cols[i].push(ticket[j][i]);
+      if (i === j) diagonals[0].push(ticket[i][i]);
+      if (i + j === 4) diagonals[1].push(ticket[i][4 - i]);
+    }
+  }
+
+  // Check if any row, column, or diagonal is fully marked
+  for (let i = 0; i < 5; i++) {
+    if (rows[i].every(num => currentGame.numbersCalled.includes(num))) return true;
+    if (cols[i].every(num => currentGame.numbersCalled.includes(num))) return true;
+  }
+  if (diagonals[0].every(num => currentGame.numbersCalled.includes(num))) return true;
+  if (diagonals[1].every(num => currentGame.numbersCalled.includes(num))) return true;
+
+  return false;
 }
 
 // Start countdown (50s) if not already running
@@ -228,7 +252,6 @@ function resetGame() {
 // Socket handlers
 io.on("connection", (socket) => {
   console.log(`A user connected: ${socket.id}`);
-
   // Join game
   socket.on("joinGame", ({ userId, username = "Player", stake } = {}) => {
     if (!userId) {
@@ -348,7 +371,6 @@ io.on("connection", (socket) => {
         winner.balance = winner.balance - stake + prize;
         if (winner.balance < 0) throw new Error("Winner balance cannot be negative");
         await winner.save({ transaction: t });
-
         // Deduct stake from losers
         const losersRecords = await User.findAll({ where: { id: losers }, transaction: t });
         for (const loser of losersRecords) {
