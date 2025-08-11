@@ -65,7 +65,7 @@ const GAME_ROOM = "bingo";
 
 // In-memory single game state
 const currentGame = {
-  players: [],        // [{ socketId, userId, username }]
+  players: [],        // [{ userId, username, socketIds: [] }]
   tickets: {},        // { userId: [numbers...] }
   numbersCalled: [],  // numbers already called
   state: "waiting",   // waiting | countdown | started | ended
@@ -75,6 +75,21 @@ const currentGame = {
   callerInterval: null,
   currentCountdown: 50,
 };
+
+// Map userId => { username, socketIds: Set<string> }
+const playersMap = new Map();
+
+// Utility: rebuild currentGame.players array from playersMap
+function rebuildPlayersArray() {
+  currentGame.players = [];
+  for (const [userId, data] of playersMap.entries()) {
+    currentGame.players.push({
+      userId,
+      username: data.username,
+      socketIds: Array.from(data.socketIds),
+    });
+  }
+}
 
 // Utility: broadcast player info to room & homepage
 function broadcastPlayerInfo() {
@@ -104,7 +119,6 @@ function startCountdownIfNeeded() {
   currentGame.currentCountdown = counter;
 
   io.to(GAME_ROOM).emit("countdownUpdate", counter);
-
   currentGame.countdownInterval = setInterval(() => {
     // if players dropped below 2, stop countdown and reset
     if (currentGame.players.length < 2) {
@@ -150,21 +164,16 @@ function stopAndResetCountdown() {
 
 // Start automatically calling numbers every 3 seconds (until all numbers called or game ends)
 function startCallingNumbers() {
-  // If already calling, don't start another
   if (currentGame.callerInterval) return;
-
-  // Safety: if numbersCalled length is 100 already, don't start
   if (currentGame.numbersCalled.length >= 100) return;
 
   currentGame.callerInterval = setInterval(() => {
-    // safety: stop if game not in started state
     if (currentGame.state !== "started") {
       clearInterval(currentGame.callerInterval);
       currentGame.callerInterval = null;
       return;
     }
 
-    // pick a random number from 1..100 not in numbersCalled
     let tries = 0;
     let newNumber = null;
     while (tries < 500) {
@@ -177,20 +186,17 @@ function startCallingNumbers() {
     }
 
     if (newNumber === null) {
-      // all numbers exhausted
       clearInterval(currentGame.callerInterval);
       currentGame.callerInterval = null;
-      // End game as draw
       currentGame.state = "ended";
       io.to(GAME_ROOM).emit("gameEnded", { reason: "noNumbersLeft" });
-      // reset after short delay
       setTimeout(resetGame, 5000);
       return;
     }
 
     currentGame.numbersCalled.push(newNumber);
     io.to(GAME_ROOM).emit("numberCalled", newNumber);
-  }, 3000); // call every 3s (tweakable)
+  }, 3000);
 }
 
 // Stop caller interval
@@ -201,12 +207,12 @@ function stopCallingNumbers() {
   }
 }
 
-// Reset game state to waiting (clears tickets & numbers but keeps players array empty)
+// Reset game state
 function resetGame() {
   stopCallingNumbers();
   stopAndResetCountdown();
 
-  // Clear state except players (keep empty)
+  playersMap.clear();  // clear map here to avoid mismatch
   currentGame.players = [];
   currentGame.tickets = {};
   currentGame.numbersCalled = [];
@@ -215,7 +221,6 @@ function resetGame() {
   currentGame.currentCountdown = 50;
   currentGame.stakePerPlayer = 0;
 
-  // Notify homepage that room is reset
   io.emit("stakePlayerCount", { gameId: GAME_ROOM, count: 0 });
   io.to(GAME_ROOM).emit("gameReset");
 }
@@ -225,73 +230,68 @@ io.on("connection", (socket) => {
   console.log(`A user connected: ${socket.id}`);
 
   // Join game
-  // payload: { userId, username, stake (optional) }
   socket.on("joinGame", ({ userId, username = "Player", stake } = {}) => {
     if (!userId) {
       return socket.emit("error", { message: "joinGame requires userId" });
     }
 
-    // Add or update stakePerPlayer if provided (if not set yet)
+    // Update stakePerPlayer if needed
     if (stake && !currentGame.stakePerPlayer) {
       currentGame.stakePerPlayer = Number(stake);
     }
 
-    // Remove duplicate entry for same userId (reconnect)
-    currentGame.players = currentGame.players.filter((p) => p.userId !== userId);
+    // Add or update user in playersMap
+    if (playersMap.has(userId)) {
+      playersMap.get(userId).socketIds.add(socket.id);
+    } else {
+      playersMap.set(userId, { username, socketIds: new Set([socket.id]) });
+    }
 
-    currentGame.players.push({ socketId: socket.id, userId, username });
+    rebuildPlayersArray();
 
     socket.join(GAME_ROOM);
     console.log(`✅ User ${userId} (${socket.id}) joined ${GAME_ROOM}`);
-    // Broadcast updates
+
     broadcastPlayerInfo();
     broadcastWinAmount();
-    // Start countdown if enough players
     if (currentGame.players.length >= 2 && currentGame.state === "waiting") {
       startCountdownIfNeeded();
     } else if (currentGame.state === "countdown") {
-      // provide current countdown to newcomer
       socket.emit("countdownUpdate", currentGame.currentCountdown);
     }
 
-    // Emit state to new client
     socket.emit("gameStateUpdate", { state: currentGame.state, countdown: currentGame.currentCountdown });
   });
 
   // Leave game
-  // payload: { userId }
   socket.on("leaveGame", ({ userId } = {}) => {
     if (!userId) return;
 
-    const before = currentGame.players.length;
-    currentGame.players = currentGame.players.filter((p) => p.socketId !== socket.id && p.userId !== userId);
+    if (playersMap.has(userId)) {
+      const userData = playersMap.get(userId);
+      userData.socketIds.delete(socket.id);
+      if (userData.socketIds.size === 0) {
+        playersMap.delete(userId);
+      }
+    }
+
+    rebuildPlayersArray();
+
     socket.leave(GAME_ROOM);
 
-    if (currentGame.players.length !== before) {
-      // If players remain > 0 but at least one remains, we may need to deduct leaver's balance
-      if (before > 1) {
-        // There were multiple players before leave — apply penalty to leaver
-        // Inform only the leaving socket to deduct balance (clients should call API to update DB)
-        socket.emit("deductBalance", { amount: currentGame.stakePerPlayer || 0, reason: "leftDuringGame" });
-      }
+    broadcastPlayerInfo();
+    broadcastWinAmount();
 
-      // If players dropped below 2 and countdown is running, stop & reset
-      if (currentGame.players.length < 2 && currentGame.countdownInterval) {
-        stopAndResetCountdown();
-      }
+    if (currentGame.players.length < 2 && currentGame.countdownInterval) {
+      stopAndResetCountdown();
+    }
 
-      // If no players left -> reset game completely
-      if (currentGame.players.length === 0) {
-        resetGame();
-      } else {
-        broadcastPlayerInfo();
-        broadcastWinAmount();
-      }
+    if (currentGame.players.length === 0) {
+      resetGame();
     }
   });
 
   // Select ticket number
-  // payload: { userId, number }
   socket.on("selectTicketNumber", ({ userId, number } = {}) => {
     if (!userId || typeof number !== "number") return;
 
@@ -300,12 +300,10 @@ io.on("connection", (socket) => {
       currentGame.tickets[userId].push(number);
     }
 
-    // Broadcast the tickets map to all clients in the room
     io.to(GAME_ROOM).emit("ticketNumbersUpdated", currentGame.tickets);
   });
 
-  // Caller or server can emit a manual callNumber too; we accept it
-  // payload: { number }  (server-client or admin/driver)
+  // Call number manually
   socket.on("callNumber", ({ number } = {}) => {
     if (typeof number !== "number") return;
     if (!currentGame.numbersCalled.includes(number)) {
@@ -314,31 +312,24 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Bingo win reported by a client
-  // payload: { userId }
+  // Bingo win
   socket.on("bingoWin", async ({ userId } = {}) => {
     if (!userId) return;
-
-    // Only process if game started
     if (currentGame.state !== "started") return;
 
     currentGame.state = "ended";
     io.to(GAME_ROOM).emit("gameWon", { userId });
 
-    // stop auto-caller
     stopCallingNumbers();
 
     const stake = Number(currentGame.stakePerPlayer) || 0;
     const totalStake = stake * currentGame.players.length;
     const prize = Math.floor(totalStake * 0.8);
 
-    // Build losers array (all players except winner)
-    const losers = currentGame.players.map((p) => p.userId).filter(id => id !== userId);
+    const losers = currentGame.players.map(p => p.userId).filter(id => id !== userId);
 
     try {
-      // Begin transaction
       await sequelize.transaction(async (t) => {
-        // Update winner balance: deduct stake, add prize
         const winner = await User.findOne({ where: { id: userId }, transaction: t });
         if (!winner) throw new Error("Winner user not found");
 
@@ -346,62 +337,59 @@ io.on("connection", (socket) => {
         if (winner.balance < 0) throw new Error("Winner balance cannot be negative");
         await winner.save({ transaction: t });
 
-        // Update losers balance: deduct stake
-        const losersRecords = await User.findAll({
-          where: { id: losers },
-          transaction: t,
-        });for (const loser of losersRecords) {
+        const losersRecords = await User.findAll({ where: { id: losers }, transaction: t });
+        for (const loser of losersRecords) {
           loser.balance = loser.balance - stake;
-          if (loser.balance < 0) loser.balance = 0; // avoid negative balance
+          if (loser.balance < 0) loser.balance = 0;
           await loser.save({ transaction: t });
         }
       });
 
-      // After DB update, fetch updated balances for all players in this game
-      const allPlayerIds = currentGame.players.map((p) => p.userId);
+      const allPlayerIds = currentGame.players.map(p => p.userId);
       const allPlayers = await User.findAll({ where: { id: allPlayerIds } });
-
-      // Prepare balances map { userId: balance }
       const balances = {};
       for (const player of allPlayers) {
         balances[player.id] = player.balance;
       }
-
-      // Emit balances update to clients
       io.to(GAME_ROOM).emit("balanceChange", { balances });
 
     } catch (error) {
       console.error("Error updating balances on bingoWin:", error);
     }
 
-    // Keep the winner visible for some time, then reset the game
     setTimeout(() => {
       resetGame();
     }, 15000);
   });
 
-  // handle disconnect similar to leave (but we'll treat disconnect as leave without immediate penalty
-  // unless there were multiple players -> then we emit deductBalance to that socket (not guaranteed because disconnected)
+  // Disconnect handler
   socket.on("disconnect", () => {
     console.log(`User disconnected: ${socket.id}`);
-    const before = currentGame.players.length;
-    currentGame.players = currentGame.players.filter((p) => p.socketId !== socket.id);
-    if (currentGame.players.length !== before) {
-      // If players dropped below 2 and countdown running, stop & reset
-      if (currentGame.players.length < 2 && currentGame.countdownInterval) {
-        stopAndResetCountdown();
-      }
 
-      if (currentGame.players.length === 0) {
-        resetGame();
-      } else {
-        broadcastPlayerInfo();
-        broadcastWinAmount();
+    for (const [userId, data] of playersMap.entries()) {
+      if (data.socketIds.has(socket.id)) {
+        data.socketIds.delete(socket.id);
+        if (data.socketIds.size === 0) {
+          playersMap.delete(userId);
+        }
+        break;
       }
+    }
+
+    rebuildPlayersArray();
+
+    if (currentGame.players.length < 2 && currentGame.countdownInterval) {
+      stopAndResetCountdown();
+    }
+
+    if (currentGame.players.length === 0) {
+      resetGame();
+    } else {
+      broadcastPlayerInfo();
+      broadcastWinAmount();
     }
   });
 });
-
 // --------------------
 // Sync DB and Start Server
 // --------------------
