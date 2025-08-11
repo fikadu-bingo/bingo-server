@@ -2,6 +2,7 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const sequelize = require("./config/db");
+const { User } = require("./models"); // Make sure User model exports correctly
 require("./models/cashout");
 require("./models/promocode");
 const cors = require("cors");
@@ -242,7 +243,6 @@ io.on("connection", (socket) => {
 
     socket.join(GAME_ROOM);
     console.log(`✅ User ${userId} (${socket.id}) joined ${GAME_ROOM}`);
-
     // Broadcast updates
     broadcastPlayerInfo();
     broadcastWinAmount();
@@ -316,7 +316,7 @@ io.on("connection", (socket) => {
 
   // Bingo win reported by a client
   // payload: { userId }
-  socket.on("bingoWin", ({ userId } = {}) => {
+  socket.on("bingoWin", async ({ userId } = {}) => {
     if (!userId) return;
 
     // Only process if game started
@@ -328,7 +328,6 @@ io.on("connection", (socket) => {
     // stop auto-caller
     stopCallingNumbers();
 
-    // Compute prize: 80% of total stakes
     const stake = Number(currentGame.stakePerPlayer) || 0;
     const totalStake = stake * currentGame.players.length;
     const prize = Math.floor(totalStake * 0.8);
@@ -336,14 +335,44 @@ io.on("connection", (socket) => {
     // Build losers array (all players except winner)
     const losers = currentGame.players.map((p) => p.userId).filter(id => id !== userId);
 
-    // Emit balance change instructions (clients should call backend APIs to persist)
-    io.to(GAME_ROOM).emit("balanceChange", {
-      winner: userId,
-      prize,
-      losers,
-      perLoserDeduct: stake,
-      totalCollected: totalStake,
-    });
+    try {
+      // Begin transaction
+      await sequelize.transaction(async (t) => {
+        // Update winner balance: deduct stake, add prize
+        const winner = await User.findOne({ where: { id: userId }, transaction: t });
+        if (!winner) throw new Error("Winner user not found");
+
+        winner.balance = winner.balance - stake + prize;
+        if (winner.balance < 0) throw new Error("Winner balance cannot be negative");
+        await winner.save({ transaction: t });
+
+        // Update losers balance: deduct stake
+        const losersRecords = await User.findAll({
+          where: { id: losers },
+          transaction: t,
+        });for (const loser of losersRecords) {
+          loser.balance = loser.balance - stake;
+          if (loser.balance < 0) loser.balance = 0; // avoid negative balance
+          await loser.save({ transaction: t });
+        }
+      });
+
+      // After DB update, fetch updated balances for all players in this game
+      const allPlayerIds = currentGame.players.map((p) => p.userId);
+      const allPlayers = await User.findAll({ where: { id: allPlayerIds } });
+
+      // Prepare balances map { userId: balance }
+      const balances = {};
+      for (const player of allPlayers) {
+        balances[player.id] = player.balance;
+      }
+
+      // Emit balances update to clients
+      io.to(GAME_ROOM).emit("balanceChange", { balances });
+
+    } catch (error) {
+      console.error("Error updating balances on bingoWin:", error);
+    }
 
     // Keep the winner visible for some time, then reset the game
     setTimeout(() => {
