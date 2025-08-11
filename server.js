@@ -251,7 +251,6 @@ io.on("connection", (socket) => {
 
     socket.join(GAME_ROOM);
     console.log(`✅ User ${userId} (${socket.id}) joined ${GAME_ROOM}`);
-
     broadcastPlayerInfo();
     broadcastWinAmount();
     if (currentGame.players.length >= 2 && currentGame.state === "waiting") {
@@ -303,6 +302,16 @@ io.on("connection", (socket) => {
     io.to(GAME_ROOM).emit("ticketNumbersUpdated", currentGame.tickets);
   });
 
+  // Deselect ticket number
+  socket.on("deselectTicketNumber", ({ userId, oldNumber } = {}) => {
+    if (!userId || typeof oldNumber !== "number") return;
+
+    if (currentGame.tickets[userId]) {
+      currentGame.tickets[userId] = currentGame.tickets[userId].filter(n => n !== oldNumber);
+      io.to(GAME_ROOM).emit("ticketNumbersUpdated", currentGame.tickets);
+    }
+  });
+
   // Call number manually
   socket.on("callNumber", ({ number } = {}) => {
     if (typeof number !== "number") return;
@@ -312,13 +321,13 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Bingo win
+  // Bingo win - the key handler updated here
   socket.on("bingoWin", async ({ userId } = {}) => {
     if (!userId) return;
     if (currentGame.state !== "started") return;
 
     currentGame.state = "ended";
-    io.to(GAME_ROOM).emit("gameWon", { userId });
+    io.to(GAME_ROOM).emit("gameWon", { userId });  // notify all clients about winner
 
     stopCallingNumbers();
 
@@ -326,17 +335,21 @@ io.on("connection", (socket) => {
     const totalStake = stake * currentGame.players.length;
     const prize = Math.floor(totalStake * 0.8);
 
+    // Get losers userIds (all except winner)
     const losers = currentGame.players.map(p => p.userId).filter(id => id !== userId);
 
     try {
       await sequelize.transaction(async (t) => {
+        // Find winner user in DB
         const winner = await User.findOne({ where: { id: userId }, transaction: t });
         if (!winner) throw new Error("Winner user not found");
 
+        // Update winner balance: add prize minus stake (net + prize - stake)
         winner.balance = winner.balance - stake + prize;
         if (winner.balance < 0) throw new Error("Winner balance cannot be negative");
         await winner.save({ transaction: t });
 
+        // Deduct stake from losers
         const losersRecords = await User.findAll({ where: { id: losers }, transaction: t });
         for (const loser of losersRecords) {
           loser.balance = loser.balance - stake;
@@ -345,6 +358,7 @@ io.on("connection", (socket) => {
         }
       });
 
+      // Fetch updated balances for all players
       const allPlayerIds = currentGame.players.map(p => p.userId);
       const allPlayers = await User.findAll({ where: { id: allPlayerIds } });
       const balances = {};
@@ -356,7 +370,7 @@ io.on("connection", (socket) => {
     } catch (error) {
       console.error("Error updating balances on bingoWin:", error);
     }
-
+    // Reset game after 15 seconds so clients can see result
     setTimeout(() => {
       resetGame();
     }, 15000);
@@ -390,6 +404,7 @@ io.on("connection", (socket) => {
     }
   });
 });
+
 // --------------------
 // Sync DB and Start Server
 // --------------------
