@@ -51,26 +51,31 @@ const io = new Server(server, {
   },
 });
 
-const GAME_ROOM = "bingo";
+// Supported stake groups
+const STAKE_GROUPS = [10, 20, 50, 100, 200];
 
-const currentGame = {
-  players: [],        // [{ userId, username, socketIds: [] }]
-  tickets: {},        // { userId: [[row arrays]] }  --> Each ticket is a 5x5 array of numbers
-  numbersCalled: [],  // numbers already called
-  state: "waiting",   // waiting | countdown | started | ended
-  countdown: 50,
-  countdownInterval: null,
-  callerInterval: null,
-  currentCountdown: 50,
-  stakePerPlayer: 0,
-};
+// Initialize game states for each stake group
+const games = {};
+for (const stake of STAKE_GROUPS) {
+  games[stake] = {
+    playersMap: new Map(),   // userId -> { username, socketIds: Set }
+    players: [],             // array for broadcasting
+    tickets: {},             // userId -> 5x5 ticket array
+    numbersCalled: [],       // called numbers for this game
+    state: "waiting",        // waiting | countdown | started | ended
+    countdown: 50,
+    currentCountdown: 50,
+    countdownInterval: null,
+    callerInterval: null,
+    stakePerPlayer: stake,
+  };
+}
 
-const playersMap = new Map();
-
-function rebuildPlayersArray() {
-  currentGame.players = [];
-  for (const [userId, data] of playersMap.entries()) {
-    currentGame.players.push({
+function rebuildPlayersArray(stake) {
+  const game = games[stake];
+  game.players = [];
+  for (const [userId, data] of game.playersMap.entries()) {
+    game.players.push({
       userId,
       username: data.username,
       socketIds: Array.from(data.socketIds),
@@ -78,25 +83,24 @@ function rebuildPlayersArray() {
   }
 }
 
-function broadcastPlayerInfo() {
-  const players = currentGame.players;
-  io.to(GAME_ROOM).emit("playerListUpdated", { players });
-  io.to(GAME_ROOM).emit("playerCountUpdate", players.length);
+function broadcastPlayerInfo(stake) {
+  const game = games[stake];
+  io.to(`bingo_${stake}`).emit("playerListUpdated", { players: game.players });
+  io.to(`bingo_${stake}`).emit("playerCountUpdate", game.players.length);
 }
 
-function broadcastWinAmount() {
-  const stake = Number(currentGame.stakePerPlayer) ?? 0;
-  const totalStake = stake * currentGame.players.length;
+function broadcastWinAmount(stake) {
+  const game = games[stake];
+  const stakeNum = Number(game.stakePerPlayer) || 0;
+  const totalStake = stakeNum * game.players.length;
   const winAmount = Math.floor(totalStake * 0.8);
-  io.to(GAME_ROOM).emit("winAmountUpdate", winAmount);
+  io.to(`bingo_${stake}`).emit("winAmountUpdate", winAmount);
 }
 
-// Check if a ticket (5x5 array) has bingo (row, col, diagonal) given numbersCalled array
 function checkBingo(ticket, numbersCalled) {
   const rows = ticket;
   const cols = [];
 
-  // Prepare columns and diagonals
   for (let i = 0; i < 5; i++) {
     cols[i] = [];
     for (let j = 0; j < 5; j++) {
@@ -107,99 +111,94 @@ function checkBingo(ticket, numbersCalled) {
   const diagonal1 = [ticket[0][0], ticket[1][1], ticket[2][2], ticket[3][3], ticket[4][4]];
   const diagonal2 = [ticket[0][4], ticket[1][3], ticket[2][2], ticket[3][1], ticket[4][0]];
 
-  // Helper to check if all numbers in array are called or center (free space)
   const isCompleteLine = (line) =>
     line.every((num, idx) => {
-      if (idx === 2 && num === ticket[2][2]) return true; // center is free space
+      if (idx === 2 && num === ticket[2][2]) return true; // center free space
       return numbersCalled.includes(num);
     });
 
-  // Check rows
   for (let i = 0; i < 5; i++) {
     if (isCompleteLine(rows[i])) return true;
-  }
-
-  // Check columns
-  for (let i = 0; i < 5; i++) {
     if (isCompleteLine(cols[i])) return true;
   }
-
-  // Check diagonals
   if (isCompleteLine(diagonal1)) return true;
   if (isCompleteLine(diagonal2)) return true;
 
   return false;
 }
 
-function startCountdownIfNeeded() {
-  if (currentGame.countdownInterval) return;
-  if (currentGame.state !== "waiting") return;
-  currentGame.state = "countdown";
-  let counter = typeof currentGame.countdown === "number" ? currentGame.countdown : 50;
-  currentGame.currentCountdown = counter;
+function startCountdownIfNeeded(stake) {
+  const game = games[stake];
+  if (game.countdownInterval) return;
+  if (game.state !== "waiting") return;
+  if (game.players.length < 2) return; // Only start if at least 2 players
+  game.state = "countdown";
+  let counter = typeof game.countdown === "number" ? game.countdown : 50;
+  game.currentCountdown = counter;
 
-  io.to(GAME_ROOM).emit("countdownUpdate", counter);
-  currentGame.countdownInterval = setInterval(() => {
-    if (currentGame.players.length < 2) {
-      clearInterval(currentGame.countdownInterval);
-      currentGame.countdownInterval = null;
-      currentGame.state = "waiting";
-      currentGame.countdown = 50;
-      currentGame.currentCountdown = 50;
-      io.to(GAME_ROOM).emit("countdownStopped", currentGame.currentCountdown);
+  io.to(`bingo_${stake}`).emit("countdownUpdate", counter);
+
+  game.countdownInterval = setInterval(() => {
+    if (game.players.length < 2) {
+      clearInterval(game.countdownInterval);
+      game.countdownInterval = null;
+      game.state = "waiting";
+      game.countdown = 50;
+      game.currentCountdown = 50;
+      io.to(`bingo_${stake}`).emit("countdownStopped", game.currentCountdown);
       return;
     }
     counter -= 1;
-    currentGame.currentCountdown = counter;
-    io.to(GAME_ROOM).emit("countdownUpdate", counter);
-    if (counter < 0) {
-      clearInterval(currentGame.countdownInterval);
-      currentGame.countdownInterval = null;
-      currentGame.state = "started";
-      currentGame.currentCountdown = 0;
-      io.to(GAME_ROOM).emit("countdownUpdate", 0);
-      io.to(GAME_ROOM).emit("gameStarted");
+    game.currentCountdown = counter;
+    io.to(`bingo_${stake}`).emit("countdownUpdate", counter);
 
-      startCallingNumbers();
+    if (counter < 0) {
+      clearInterval(game.countdownInterval);
+      game.countdownInterval = null;
+      game.state = "started";
+      game.currentCountdown = 0;
+      io.to(`bingo_${stake}`).emit("countdownUpdate", 0);
+      io.to(`bingo_${stake}`).emit("gameStarted");
+
+      startCallingNumbers(stake);
     }
   }, 1000);
 }
 
-function stopAndResetCountdown() {
-  if (currentGame.countdownInterval) {
-    clearInterval(currentGame.countdownInterval);
-    currentGame.countdownInterval = null;
+function stopAndResetCountdown(stake) {
+  const game = games[stake];
+  if (game.countdownInterval) {
+    clearInterval(game.countdownInterval);
+    game.countdownInterval = null;
   }
-  currentGame.state = "waiting";
-  currentGame.countdown = 50;
-  currentGame.currentCountdown = 50;
-  io.to(GAME_ROOM).emit("countdownStopped", currentGame.currentCountdown);
+  game.state = "waiting";
+  game.countdown = 50;
+  game.currentCountdown = 50;
+  io.to(`bingo_${stake}`).emit("countdownStopped", game.currentCountdown);
 }
 
-// THIS FUNCTION: After calling a number, check if any ticket has bingo.
-// If so, declare winner and stop the game.
-async function checkForWinner() {
-  for (const player of currentGame.players) {
-    const ticket = currentGame.tickets[player.userId]; // Expect 5x5 array
+async function checkForWinner(stake) {
+  const game = games[stake];
+  for (const player of game.players) {
+    const ticket = game.tickets[player.userId];
+    if (!ticket) continue;
 
-    if (!ticket) continue; // no ticket?
-
-    if (checkBingo(ticket, currentGame.numbersCalled)) {
-      // We have a winner!
-      currentGame.state = "ended";
-      io.to(GAME_ROOM).emit("gameWon", {
+    if (checkBingo(ticket, game.numbersCalled)) {
+      // Winner found
+      game.state = "ended";
+      io.to(`bingo_${stake}`).emit("gameWon", {
         userId: player.userId,
         username: player.username,
       });
-      stopCallingNumbers();
+
+      stopCallingNumbers(stake);
 
       // Calculate prize & update DB
-      const stake = Number(currentGame.stakePerPlayer) ?? 0;
-      const totalStake = stake * currentGame.players.length;
+      const stakeNum = Number(game.stakePerPlayer) || 0;
+      const totalStake = stakeNum * game.players.length;
       const prize = Math.floor(totalStake * 0.8);
 
-      // losers: all except winner
-      const losers = currentGame.players
+      const losers = game.players
         .map((p) => p.userId)
         .filter((id) => id !== player.userId);
 
@@ -208,47 +207,49 @@ async function checkForWinner() {
           const winner = await User.findOne({ where: { id: player.userId }, transaction: t });
           if (!winner) throw new Error("Winner user not found");
 
-          winner.balance = winner.balance - stake + prize;
-          if (winner.balance < 0) throw new Error("Winner balance cannot be negative");
+          winner.balance = winner.balance - stakeNum + prize;
+          if (winner.balance < 0) throw new Error("Winner balance negative");
           await winner.save({ transaction: t });
 
           const losersRecords = await User.findAll({ where: { id: losers }, transaction: t });
           for (const loser of losersRecords) {
-            loser.balance = loser.balance - stake;
+            loser.balance = loser.balance - stakeNum;
             if (loser.balance < 0) loser.balance = 0;
             await loser.save({ transaction: t });
           }
         });
 
-        // Update balances for all players
-        const allPlayerIds = currentGame.players.map((p) => p.userId);
+        // Update balances for all players in this game
+        const allPlayerIds = game.players.map((p) => p.userId);
         const allPlayers = await User.findAll({ where: { id: allPlayerIds } });
         const balances = {};
         for (const p of allPlayers) {
           balances[p.id] = p.balance;
         }
-        io.to(GAME_ROOM).emit("balanceChange", { balances });
+        io.to(`bingo_${stake}`).emit("balanceChange", { balances });
       } catch (error) {
         console.error("Error updating balances on bingoWin:", error);
       }
 
       // Reset game after 15 seconds
       setTimeout(() => {
-        resetGame();
+        resetGame(stake);
       }, 15000);
 
-      break; // exit loop after first winner found
+      break;
     }
   }
 }
 
-function startCallingNumbers() {
-  if (currentGame.callerInterval) return;
-  if (currentGame.numbersCalled.length >= 100) return;
-  currentGame.callerInterval = setInterval(async () => {
-    if (currentGame.state !== "started") {
-      clearInterval(currentGame.callerInterval);
-      currentGame.callerInterval = null;
+function startCallingNumbers(stake) {
+  const game = games[stake];
+  if (game.callerInterval) return;
+  if (game.numbersCalled.length >= 100) return;
+
+  game.callerInterval = setInterval(async () => {
+    if (game.state !== "started") {
+      clearInterval(game.callerInterval);
+      game.callerInterval = null;
       return;
     }
 
@@ -256,156 +257,157 @@ function startCallingNumbers() {
     let newNumber = null;
     while (tries < 500) {
       const candidate = Math.floor(Math.random() * 100) + 1;
-      if (!currentGame.numbersCalled.includes(candidate)) {
+      if (!game.numbersCalled.includes(candidate)) {
         newNumber = candidate;
         break;
       }
       tries++;
     }
-
     if (newNumber === null) {
-      clearInterval(currentGame.callerInterval);
-      currentGame.callerInterval = null;
-      currentGame.state = "ended";
-      io.to(GAME_ROOM).emit("gameEnded", { reason: "noNumbersLeft" });
-      setTimeout(resetGame, 5000);
+      clearInterval(game.callerInterval);
+      game.callerInterval = null;
+      game.state = "ended";
+      io.to(`bingo_${stake}`).emit("gameEnded", { reason: "noNumbersLeft" });
+      setTimeout(() => resetGame(stake), 5000);
       return;
     }
 
-    currentGame.numbersCalled.push(newNumber);
-    io.to(GAME_ROOM).emit("numberCalled", newNumber);
+    game.numbersCalled.push(newNumber);
+    io.to(`bingo_${stake}`).emit("numberCalled", newNumber);
 
-    // After calling a new number, check if anyone has bingo
-    await checkForWinner();
+    await checkForWinner(stake);
   }, 3000);
 }
 
-function stopCallingNumbers() {
-  if (currentGame.callerInterval) {
-    clearInterval(currentGame.callerInterval);
-    currentGame.callerInterval = null;
+function stopCallingNumbers(stake) {
+  const game = games[stake];
+  if (game.callerInterval) {
+    clearInterval(game.callerInterval);
+    game.callerInterval = null;
   }
 }
 
-function resetGame() {
-  stopCallingNumbers();
-  stopAndResetCountdown();
+function resetGame(stake) {
+  const game = games[stake];
+  stopCallingNumbers(stake);
+  stopAndResetCountdown(stake);
 
-  playersMap.clear();
-  currentGame.players = [];
-  currentGame.tickets = {};
-  currentGame.numbersCalled = [];
-  currentGame.state = "waiting";
-  currentGame.countdown = 50;
-  currentGame.currentCountdown = 50;
-  currentGame.stakePerPlayer = 0;
+  game.playersMap.clear();
+  game.players = [];
+  game.tickets = {};
+  game.numbersCalled = [];
+  game.state = "waiting";
+  game.countdown = 50;
+  game.currentCountdown = 50;
+  // stakePerPlayer remains the same
 
-  io.emit("stakePlayerCount", { gameId: GAME_ROOM, count: 0 });
-  io.to(GAME_ROOM).emit("gameReset");
+  io.to(`bingo_${stake}`).emit("stakePlayerCount", { gameId: `bingo_${stake}`, count: 0 });
+  io.to(`bingo_${stake}`).emit("gameReset");
 }
 
 io.on("connection", (socket) => {
   console.log(`A user connected: ${socket.id}`);
 
   socket.on("joinGame", ({ userId, username = "Player", stake, ticket } = {}) => {
-    if (!userId) {
-      return socket.emit("error", { message: "joinGame requires userId" });
+    if (!userId || !stake || !STAKE_GROUPS.includes(Number(stake))) {
+      return socket.emit("error", { message: "joinGame requires valid userId and stake" });
     }
 
-    if (stake && !currentGame.stakePerPlayer) {
-      currentGame.stakePerPlayer = Number(stake);
-    }
+    const game = games[stake];
 
-    // Add/update user in playersMap
-    if (playersMap.has(userId)) {
-      playersMap.get(userId).socketIds.add(socket.id);
+    // Add or update player
+    if (game.playersMap.has(userId)) {
+      game.playersMap.get(userId).socketIds.add(socket.id);
     } else {
-      playersMap.set(userId, { username, socketIds: new Set([socket.id]) });
+      game.playersMap.set(userId, { username, socketIds: new Set([socket.id]) });
     }
 
-    // Save player's ticket if provided
+    // Save ticket
     if (ticket && Array.isArray(ticket) && ticket.length === 5) {
-      currentGame.tickets[userId] = ticket;
+      game.tickets[userId] = ticket;
     }
 
-    rebuildPlayersArray();
+    rebuildPlayersArray(stake);
 
-    socket.join(GAME_ROOM);
-    console.log(`✅ User ${userId} (${socket.id}) joined ${GAME_ROOM}`);
-    broadcastPlayerInfo();
-    broadcastWinAmount();
+    socket.join(`bingo_${stake}`);
+    console.log(`✅ User ${userId} (${socket.id}) joined bingo_${stake}`);
 
-    if (currentGame.players.length >= 2 && currentGame.state === "waiting") {
-      startCountdownIfNeeded();
-    } else if (currentGame.state === "countdown") {
-      socket.emit("countdownUpdate", currentGame.currentCountdown);
+    broadcastPlayerInfo(stake);
+    broadcastWinAmount(stake);
+
+    if (game.players.length >= 2 && game.state === "waiting") {
+      startCountdownIfNeeded(stake);
+    } else if (game.state === "countdown") {
+      socket.emit("countdownUpdate", game.currentCountdown);
     }
 
-    socket.emit("gameStateUpdate", { state: currentGame.state, countdown: currentGame.currentCountdown });
+    socket.emit("gameStateUpdate", { state: game.state, countdown: game.currentCountdown });
   });
 
-  socket.on("leaveGame", ({ userId } = {}) => {
-    if (!userId) return;
+  socket.on("leaveGame", ({ userId, stake } = {}) => {
+    if (!userId || !stake || !STAKE_GROUPS.includes(Number(stake))) return;
 
-    if (playersMap.has(userId)) {
-      const userData = playersMap.get(userId);
+    const game = games[stake];
+
+    if (game.playersMap.has(userId)) {
+      const userData = game.playersMap.get(userId);
       userData.socketIds.delete(socket.id);
       if (userData.socketIds.size === 0) {
-        playersMap.delete(userId);
-        delete currentGame.tickets[userId];
+        game.playersMap.delete(userId);
+        delete game.tickets[userId];
       }
     }
 
-    rebuildPlayersArray();
+    rebuildPlayersArray(stake);
 
-    socket.leave(GAME_ROOM);
+    socket.leave(`bingo_${stake}`);
 
-    broadcastPlayerInfo();
-    broadcastWinAmount();
+    broadcastPlayerInfo(stake);
+    broadcastWinAmount(stake);
 
-    if (currentGame.players.length < 2 && currentGame.countdownInterval) {
-      stopAndResetCountdown();
+    if (game.players.length < 2 && game.countdownInterval) {
+      stopAndResetCountdown(stake);
     }
 
-    if (currentGame.players.length === 0) {
-      resetGame();
+    if (game.players.length === 0) {
+      resetGame(stake);
     }
   });
 
   socket.on("disconnect", () => {
     console.log(`User disconnected: ${socket.id}`);
 
-    for (const [userId, data] of playersMap.entries()) {
-      if (data.socketIds.has(socket.id)) {
-        data.socketIds.delete(socket.id);
-        if (data.socketIds.size === 0) {
-          playersMap.delete(userId);
-          delete currentGame.tickets[userId];
+    for (const stake of STAKE_GROUPS) {
+      const game = games[stake];
+      for (const [userId, data] of game.playersMap.entries()) {
+        if (data.socketIds.has(socket.id)) {
+          data.socketIds.delete(socket.id);
+          if (data.socketIds.size === 0) {
+            game.playersMap.delete(userId);
+            delete game.tickets[userId];
+          }
+          break;
         }
-        break;
       }
-    }
 
-    rebuildPlayersArray();
+      rebuildPlayersArray(stake);
 
-    if (currentGame.players.length < 2 && currentGame.countdownInterval) {
-      stopAndResetCountdown();
-    }
-    if (currentGame.players.length === 0) {
-      resetGame();
-    } else {
-      broadcastPlayerInfo();
-      broadcastWinAmount();
+      if (game.players.length < 2 && game.countdownInterval) {
+        stopAndResetCountdown(stake);
+      }
+      if (game.players.length === 0) {
+        resetGame(stake);
+      } else {
+        broadcastPlayerInfo(stake);
+        broadcastWinAmount(stake);
+      }
     }
   });
 
-  // Optional: Remove manual "bingoWin" event, or keep for safety
   socket.on("bingoWin", () => {
-    // You can either ignore or reject client manual bingo claims here
     socket.emit("error", { message: "Manual bingo call not allowed." });
   });
 });
-
 sequelize
   .sync({ alter: true })
   .then(() => {
