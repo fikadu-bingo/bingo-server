@@ -189,7 +189,7 @@ async function checkForWinner(stake) {
       io.to(`bingo_${stake}`).emit("gameWon", {
         userId: player.userId,
         username: player.username,
-        prize
+        
       });
 
       stopCallingNumbers(stake);
@@ -419,4 +419,5 @@ sequelize
   })
   .catch((err) => {
     console.error("❌ Failed to sync DB:", err);
+
   });
