@@ -1,5 +1,5 @@
 // controllers/agentController.js
-const { Cashout, User } = require("../models"); // Adjust path if needed
+const { Cashout, User,Agent } = require("../models"); // Adjust path if needed
 const db = require("../config/db"); // PostgreSQL connection
 const multer = require("multer");
 const path = require("path");
@@ -7,6 +7,7 @@ const fs = require("fs");
 
 const jwt = require("jsonwebtoken");
 const SECRET_KEY = "agent_secret_key"; // same as in your middleware
+const bcrypt = require("bcrypt");
 
 // ---------------------------
 // Multer setup for receipt upload
@@ -27,23 +28,28 @@ const upload = multer({ storage }).single("receipt");
 // ---------------------------
 // Agent Login (Optional Basic)
 // ---------------------------
+ // make sure Agent model is exported from index.js
+
+
 exports.agentLogin = async (req, res) => {
   const { username, password } = req.body;
 
-  if (username === "agent" && password === "123456") {
-    // Create payload (you can add more info if needed)
-    const payload = { username };
+  try {
+    const agent = await Agent.findOne({ where: { username } });
+    if (!agent) return res.status(401).json({ success: false, message: "Invalid username or password" });
 
-    // Generate token (expires in 1 day for example)
+    const isMatch = await bcrypt.compare(password, agent.password);
+    if (!isMatch) return res.status(401).json({ success: false, message: "Invalid username or password" });
+
+    const payload = { id: agent.id, username: agent.username };
     const token = jwt.sign(payload, SECRET_KEY, { expiresIn: "1d" });
 
-    // Return success + token
     return res.json({ success: true, token, message: "Login successful" });
-  } else {
-    return res.status(401).json({ success: false, message: "Invalid credentials" });
+  } catch (err) {
+    console.error("Agent login error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
-
 // ---------------------------
 // Deposit Requests
 // ---------------------------
@@ -223,7 +229,4 @@ await cashout.update({ status: "Rejected" });
   } catch (err) {
     res.status(500).json({ error: "Failed to reject cashout", details: err.message });
   }
-
 };
-
-
