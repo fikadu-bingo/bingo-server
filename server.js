@@ -1,4 +1,5 @@
 const express = require("express");
+const testRoutes = require('./routes/test');
 const http = require("http");
 const { Server } = require("socket.io");
 const sequelize = require("./config/db");
@@ -39,6 +40,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/agent", agentAuthRoutes);
 app.use("/api/promocode", promocodeRoutes);
 app.use("/api/promoter", promoterRoutes);
+app.use('/api', testRoutes);
 
 app.get("/", (req, res) => {
   res.send("✅ Bingo server is running!");
@@ -420,4 +422,5 @@ sequelize
   })
   .catch((err) => {
     console.error("❌ Failed to sync DB:", err);
+
   });
