@@ -22,14 +22,14 @@ const promoterRoutes = require('./routes/promoter');
 const app = express();
 const server = http.createServer(app);
 
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN ?? "https://bingo-telegram-web.vercel.app";
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN?.replace(/\/$/, "") 
+                       ?? "https://bingo-telegram-web.vercel.app";
 
 app.use(
   cors({
     origin: FRONTEND_ORIGIN,
-    
     credentials: true,
-      methods: ["GET", "POST", "PUT", "DELETE"],
+    methods: ["GET", "POST", "PUT", "DELETE"],
   })
 );
 app.use(express.json());
@@ -425,6 +425,4 @@ sequelize
   })
   .catch((err) => {
     console.error("❌ Failed to sync DB:", err);
-
   });
-
