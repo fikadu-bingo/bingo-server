@@ -1,5 +1,6 @@
 const sequelize = require("../config/db");
 const User = require("./user");
+const Agent = require("./Agent");
 const Game = require("./game");
 const Ticket = require("./Ticket");
 const Deposit = require("./deposit");
@@ -20,6 +21,7 @@ Cashout.belongsTo(User, { foreignKey: "user_id" });
 module.exports = {
   sequelize,
   User,
+   Agent,
   Game,
   Ticket,
   Deposit,
