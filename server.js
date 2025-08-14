@@ -38,7 +38,7 @@ app.use("/api/game", gameRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/agent", agentRoutes);
 app.use("/api/admin", adminRoutes);
-app.use("/api/agent", agentAuthRoutes);
+//app.use("/api/agent", agentAuthRoutes);
 app.use("/api/promocode", promocodeRoutes);
 app.use("/api/promoter", promoterRoutes);
 app.use('/api', testRoutes);
@@ -423,4 +423,5 @@ sequelize
   })
   .catch((err) => {
     console.error("❌ Failed to sync DB:", err);
+
   });
