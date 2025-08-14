@@ -26,9 +26,10 @@ const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN ?? "https://bingo-telegram-w
 
 app.use(
   cors({
-    origin: [FRONTEND_ORIGIN,
-     "http://localhost:3000"],
+    origin: FRONTEND_ORIGIN,
+    
     credentials: true,
+      methods: ["GET", "POST", "PUT", "DELETE"],
   })
 );
 app.use(express.json());
@@ -426,3 +427,4 @@ sequelize
     console.error("❌ Failed to sync DB:", err);
 
   });
+
