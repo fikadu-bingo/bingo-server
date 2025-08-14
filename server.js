@@ -17,7 +17,7 @@ const userRoutes = require("./routes/user");
 const agentRoutes = require("./routes/agentRoutes");
 const promocodeRoutes = require('./routes/promocode');
 const promoterRoutes = require('./routes/promoter');
-const agentAuthRoutes = require('./routes/agent');
+//const agentAuthRoutes = require('./routes/agent');
 
 const app = express();
 const server = http.createServer(app);
@@ -423,5 +423,4 @@ sequelize
   })
   .catch((err) => {
     console.error("❌ Failed to sync DB:", err);
-
   });
