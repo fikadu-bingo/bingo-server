@@ -1,28 +1,40 @@
-const express = require('express');
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
+// routes/agent.js
+const express = require("express");
 const router = express.Router();
-const Agent = require('../models/Agent');
+const uploadMiddleware = require("../middleware/upload");
+const verifyAgentToken = require("../middleware/agentAuth"); // JWT verification
+const {
+  agentLogin,
+  getDepositRequests,
+  approveDeposit,
+  rejectDeposit,
+  getCashoutRequests,
+  approveCashout,
+  rejectCashout
+} = require("../controllers/agentController");
 
-const SECRET_KEY = "agent_secret_key";
+// ---------------------------
+// Public route: Agent Login
+// ---------------------------
+router.post("/login", agentLogin);
 
-router.post('/login', async (req, res) => {
-  const { username, password } = req.body;
+// ---------------------------
+// Authenticated routes
+// ---------------------------
+router.use(verifyAgentToken);
 
-  try {
-    const agent = await Agent.findOne({ where: { username } });
-    if (!agent) return res.status(404).json({ error: "Agent not found" });
+// Deposit requests
+router.get("/deposit-requests", getDepositRequests);
+router.post("/deposit-requests/:id/approve", approveDeposit);
+router.post("/deposit-requests/:id/reject", rejectDeposit);
 
-    const isMatch = await bcrypt.compare(password, agent.password);
-    if (!isMatch) return res.status(401).json({ error: "Invalid credentials" });
-
-    // Generate token
-    const token = jwt.sign({ id: agent.id, username: agent.username }, SECRET_KEY, { expiresIn: "1d" });
-
-    res.json({ token });
-  } catch (err) {
-    res.status(500).json({ error: "Server error" });
-  }
-});
+// Cashout requests
+router.get("/cashout-requests", getCashoutRequests);
+router.post(
+  "/cashout-requests/:id/approve",
+  uploadMiddleware.single("receipt"),
+  approveCashout
+);
+router.post("/cashout-requests/:id/reject", rejectCashout);
 
 module.exports = router;
