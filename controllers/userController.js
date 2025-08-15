@@ -36,11 +36,11 @@ exports.telegramAuth = async (req, res) => {
 };
 
 // ==============================
-// ✅ Deposit Handler (updated to use receiptUrl from frontend)
+// ✅ Deposit Handler (unchanged from your updated version)
 // ==============================
 exports.deposit = async (req, res) => {
   try {
-    const { amount, phone, receiptUrl } = req.body; // ✅ receiptUrl instead of file
+    const { amount, phone, receiptUrl } = req.body;
     const telegram_id = req.headers["telegram_id"];
 
     console.log("📥 Deposit request:", { amount, phone, telegram_id, receiptUrl });
@@ -60,7 +60,7 @@ exports.deposit = async (req, res) => {
       user_id: user.id,
       amount: parseFloat(amount),
       phone_number: phone,
-      receipt_url: receiptUrl, // ✅ save Cloudinary URL
+      receipt_url: receiptUrl,
       date: new Date(),
       status: "pending",
     });
@@ -74,53 +74,44 @@ exports.deposit = async (req, res) => {
 };
 
 // ==============================
-// ✅ Cashout Handler (updated to use receiptUrl from frontend)
+// ✅ Cashout Handler (FIXED: no balance deduction here)
 // ==============================
 exports.cashout = async (req, res) => {
-  const { telegram_id, amount, phone_number, receiptUrl } = req.body; // ✅ receiptUrl added
+  const { telegram_id, amount, phone_number, receiptUrl } = req.body;
   console.log("📥 Cashout request received:", { telegram_id, amount, phone_number, receiptUrl });
 
   if (!telegram_id || !amount || amount <= 0) {
     return res.status(400).json({ success: false, message: "Invalid request" });
   }
 
-  const t = await User.sequelize.transaction();
-
   try {
-    const user = await User.findOne({ where: { telegram_id: String(telegram_id) }, transaction: t });
+    const user = await User.findOne({ where: { telegram_id: String(telegram_id) } });
     if (!user) {
-      await t.rollback();
       return res.status(404).json({ success: false, message: "User not found" });
     }
 
     if (user.balance < amount) {
-      await t.rollback();
       return res.status(400).json({ success: false, message: "Insufficient balance" });
     }
 
-    // Deduct balance
-    user.balance -= amount;
-    await user.save({ transaction: t });
+    // ❌ Removed: balance deduction here
+    // ✅ We only create a pending cashout request, deduction happens at admin approval
 
-    // Create cashout
     const cashout = await Cashout.create({
       user_id: user.id,
       phone_number: phone_number || user.phone_number,
       amount: parseFloat(amount),
-      receipt: receiptUrl || "", // ✅ save Cloudinary URL if provided
-      status: "pending",
+      receipt: receiptUrl || "",
+      status: "pending", // ✅ pending until approved
       date: new Date(),
-    }, { transaction: t });
+    });
 
-    await t.commit();
-    console.log("✅ Cashout created successfully:", cashout.toJSON());
-    return res.status(200).json({
-      success: true,
-      message: "Withdrawal successful",
-      balance: user.balance,
+    console.log("✅ Cashout request created (pending admin approval):", cashout.toJSON());
+    return res.status(200).json({success: true,
+      message: "Withdrawal request submitted, awaiting approval",
+      balance: user.balance, // unchanged balance
     });
   } catch (error) {
-    await t.rollback();
     console.error("🔥 Cashout error:", error);
     res.status(500).json({ success: false, message: "Internal server error" });
   }
@@ -166,7 +157,7 @@ exports.transfer = async (req, res) => {
 };
 
 // ==============================
-// ✅ Get User Profile (for frontend HomePage)
+// ✅ Get User Profile (unchanged)
 // ==============================
 exports.getMe = async (req, res) => {
   const { telegram_id } = req.query;
