@@ -181,7 +181,6 @@ function stopAndResetCountdown(stake) {
   game.currentCountdown = 50;
   io.to(`bingo_${stake}`).emit("countdownStopped", game.currentCountdown);
 }
-
 async function checkForWinner(stake) {
   const game = games[stake];
   for (const player of game.players) {
@@ -192,7 +191,6 @@ async function checkForWinner(stake) {
       // Winner found
       game.state = "ended";
 
-      // Calculate prize
       const stakeNum = Number(game.stakePerPlayer) || 0;
       const totalStake = stakeNum * game.players.length;
       const prize = Math.floor(totalStake * 0.8);
@@ -211,43 +209,45 @@ async function checkForWinner(stake) {
 
       try {
         await sequelize.transaction(async (t) => {
+          // Winner
           const winner = await User.findOne({ where: { id: player.userId }, transaction: t });
           if (!winner) throw new Error("Winner user not found");
 
           winner.balance = winner.balance - stakeNum + prize;
-          if (winner.balance < 0) throw new Error("Winner balance negative");
+          if (winner.balance < 0) winner.balance = 0;
           await winner.save({ transaction: t });
 
+          // Losers
           const losersRecords = await User.findAll({ where: { id: losers }, transaction: t });
           for (const loser of losersRecords) {
             loser.balance = loser.balance - stakeNum;
             if (loser.balance < 0) loser.balance = 0;
             await loser.save({ transaction: t });
-          }
-        });
 
-        // Update balances for all players in this game
-        const allPlayerIds = game.players.map((p) => p.userId);
-        const allPlayers = await User.findAll({ where: { id: allPlayerIds } });
-        const balances = {};
-        for (const p of allPlayers) {
-          balances[p.id] = p.balance;
-        }
-        io.to(`bingo_${stake}`).emit("balanceChange", { balances });
+            // Emit individual loser balance change
+            io.to(`bingo_${stake}`).emit("balanceChange", {
+              userId: loser.id,
+              newBalance: loser.balance,
+            });
+          }
+
+          // Emit winner balance change
+          io.to(`bingo_${stake}`).emit("balanceChange", {
+            userId: winner.id,
+            newBalance: winner.balance,
+          });
+        });
       } catch (error) {
         console.error("Error updating balances on bingoWin:", error);
       }
 
       // Reset game after 15 seconds
-      setTimeout(() => {
-        resetGame(stake);
-      }, 15000);
+      setTimeout(() => resetGame(stake), 15000);
 
       break;
     }
   }
 }
-
 function startCallingNumbers(stake) {
   const game = games[stake];
   if (game.callerInterval) return;
