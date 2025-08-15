@@ -1,6 +1,6 @@
 const { User, Deposit, Cashout } = require("../models");
 const { v4: uuidv4 } = require("uuid");
-const cloudinary = require("../config/cloudinary"); // ✅ Cloudinary config
+const cloudinary = require("../cloudinary"); // ✅ Cloudinary config
 
 // ==============================
 // ✅ Telegram Authentication Handler (unchanged)
