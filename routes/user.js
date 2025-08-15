@@ -3,27 +3,76 @@ const multer = require("multer");
 const {
   telegramAuth,
   deposit,
- 
   transfer,
-  getMe, // ✅ Added
+  getMe,
   cashout,
 } = require("../controllers/userController");
 
 const { User } = require("../models");
+const cloudinary = require("../cloudinary"); // ✅ Cloudinary config
 
 const router = express.Router();
 
-// Configure Multer for file uploads
-const uploadMiddleware = require("../middleware/upload");
+// ------------------------------
+// ✅ Multer setup (memory storage for Cloudinary)
+// ------------------------------
+const storageMemory = multer.memoryStorage(); // store files in memory
+const uploadCloud = multer({ storage: storageMemory }); // Multer instance
 
+// ------------------------------
 // Routes
-router.post("/telegram-auth", telegramAuth);
-router.post("/deposit", uploadMiddleware.single("receipt"), deposit);
+// ------------------------------
 
+// Telegram login/auth
+router.post("/telegram-auth", telegramAuth);
+
+// ------------------------------
+// Deposit route with receipt upload
+// ------------------------------
+// Frontend first uploads file to /upload-receipt
+// Then sends deposit request with receiptUrl
+router.post("/deposit", uploadCloud.single("receipt"), deposit);
+
+// Transfer route
 router.post("/transfer", transfer);
+
+// ------------------------------
+// Cashout route with optional receipt upload
+// ------------------------------
+// Frontend first uploads file to /upload-receipt (type=cashout)
+// Then sends cashout request with receiptUrl
 router.post("/cashout", cashout);
 
-// ✅ Check if user exists by Telegram ID
+// ------------------------------
+// ✅ Upload receipt to Cloudinary
+// ------------------------------
+router.post("/upload-receipt", uploadCloud.single("receipt"), async (req, res) => {
+  try {
+    const { type } = req.body;
+
+    if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+
+    // Choose folder dynamically based on type
+    const folder =
+      type === "deposit"
+        ? "bingo_deposit_receipts"
+        : type === "cashout"
+        ? "bingo_cashout_receipts"
+        : "bingo_other_receipts";
+
+    // Upload to Cloudinary via stream
+    cloudinary.uploader.upload_stream({ folder }, (err, result) => {
+      if (err) return res.status(500).json({ message: "Upload failed", error: err });
+      res.json({ url: result.secure_url }); // ✅ Return URL to frontend
+    }).end(req.file.buffer);
+  } catch (err) {
+    res.status(500).json({ message: "Upload failed", error: err.message });
+  }
+});
+
+// ------------------------------
+// Check if user exists by Telegram ID
+// ------------------------------
 router.get("/check/:telegram_id", async (req, res) => {
   try {
     const { telegram_id } = req.params;
@@ -39,8 +88,9 @@ router.get("/check/:telegram_id", async (req, res) => {
   }
 });
 
-// ✅ Get username and profile picture for frontend HomePage
+// ------------------------------
+// Get username & profile picture for frontend HomePage
+// ------------------------------
 router.get("/me", getMe);
-
 
 module.exports = router;
