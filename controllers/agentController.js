@@ -200,8 +200,7 @@ exports.approveCashout = async (req, res) => {
     });
 
     // 4. Deduct user balance
-    user.balance -= cashout.amount;
-    await user.save();
+   
 
     console.log("✅ Cashout approved and balance updated");
 
