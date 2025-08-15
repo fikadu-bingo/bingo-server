@@ -1,7 +1,9 @@
 const { User, Deposit, Cashout } = require("../models");
 const { v4: uuidv4 } = require("uuid");
 
+// ==============================
 // ✅ Telegram Authentication Handler (unchanged)
+// ==============================
 exports.telegramAuth = async (req, res) => {
   const { telegram_id, phone_number, username, profile_picture } = req.body;
 
@@ -11,7 +13,6 @@ exports.telegramAuth = async (req, res) => {
 
   try {
     const stringTelegramId = String(telegram_id);
-
     let user = await User.findOne({ where: { telegram_id: stringTelegramId } });
 
     if (user) {
@@ -34,13 +35,15 @@ exports.telegramAuth = async (req, res) => {
   }
 };
 
-// ✅ Deposit Handler (UPDATED to use receiptUrl from frontend)
+// ==============================
+// ✅ Deposit Handler (updated to use receiptUrl from frontend)
+// ==============================
 exports.deposit = async (req, res) => {
   try {
-    const { amount, phone, receiptUrl } = req.body; // ✅ get receiptUrl instead of file
+    const { amount, phone, receiptUrl } = req.body; // ✅ receiptUrl instead of file
     const telegram_id = req.headers["telegram_id"];
 
-    console.log("📥 Deposit endpoint hit:", { amount, phone, telegram_id, receiptUrl });
+    console.log("📥 Deposit request:", { amount, phone, telegram_id, receiptUrl });
 
     if (!amount || !phone || !receiptUrl) {
       return res.status(400).json({ message: "Missing required fields" });
@@ -70,7 +73,9 @@ exports.deposit = async (req, res) => {
   }
 };
 
-// ✅ Cashout Handler (UPDATED to use receiptUrl from frontend)
+// ==============================
+// ✅ Cashout Handler (updated to use receiptUrl from frontend)
+// ==============================
 exports.cashout = async (req, res) => {
   const { telegram_id, amount, phone_number, receiptUrl } = req.body; // ✅ receiptUrl added
   console.log("📥 Cashout request received:", { telegram_id, amount, phone_number, receiptUrl });
@@ -102,27 +107,28 @@ exports.cashout = async (req, res) => {
       user_id: user.id,
       phone_number: phone_number || user.phone_number,
       amount: parseFloat(amount),
-      receipt: receiptUrl || "", // ✅ save Cloudinary URL
+      receipt: receiptUrl || "", // ✅ save Cloudinary URL if provided
       status: "pending",
       date: new Date(),
     }, { transaction: t });
 
     await t.commit();
-
     console.log("✅ Cashout created successfully:", cashout.toJSON());
     return res.status(200).json({
       success: true,
       message: "Withdrawal successful",
       balance: user.balance,
     });
-    } catch (error) {
+  } catch (error) {
     await t.rollback();
     console.error("🔥 Cashout error:", error);
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
 
+// ==============================
 // ✅ Transfer Handler (unchanged)
+// ==============================
 exports.transfer = async (req, res) => {
   const { from_telegram_id, to_telegram_id, amount } = req.body;
 
@@ -159,7 +165,9 @@ exports.transfer = async (req, res) => {
   }
 };
 
-// ✅ Get User Profile (for Frontend HomePage)
+// ==============================
+// ✅ Get User Profile (for frontend HomePage)
+// ==============================
 exports.getMe = async (req, res) => {
   const { telegram_id } = req.query;
 
