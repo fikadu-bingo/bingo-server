@@ -1,9 +1,7 @@
 const { User, Deposit, Cashout } = require("../models");
-
 const { v4: uuidv4 } = require("uuid");
-const path = require("path");
 
-// ✅ Telegram Authentication Handler
+// ✅ Telegram Authentication Handler (unchanged)
 exports.telegramAuth = async (req, res) => {
   const { telegram_id, phone_number, username, profile_picture } = req.body;
 
@@ -36,60 +34,35 @@ exports.telegramAuth = async (req, res) => {
   }
 };
 
-// ✅ Deposit Handler with File Upload
-// ✅ Deposit Handler with File Upload
+// ✅ Deposit Handler (UPDATED to use receiptUrl from frontend)
 exports.deposit = async (req, res) => {
   try {
-    const { amount, phone } = req.body;
-    const receipt = req.file;
-    console.log("📸 Uploaded file object:", req.file);
-    console.log("📥 Deposit endpoint hit with:", {
-      amount,
-      phone,
-      telegram_id: req.headers["telegram_id"],
-      file: req.file?.originalname,
-    });
+    const { amount, phone, receiptUrl } = req.body; // ✅ get receiptUrl instead of file
+    const telegram_id = req.headers["telegram_id"];
 
-    if (!amount || !phone || !receipt) {
+    console.log("📥 Deposit endpoint hit:", { amount, phone, telegram_id, receiptUrl });
+
+    if (!amount || !phone || !receiptUrl) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    const telegram_id = req.headers["telegram_id"];
-    if (!telegram_id) {
-      return res.status(400).json({ message: "Missing telegram_id in header" });
-    }
-
     let user = await User.findOne({ where: { telegram_id: String(telegram_id) } });
-
     if (!user) {
       user = await User.create({ telegram_id: String(telegram_id), balance: 0 });
       console.log("✅ New user created automatically:", user.id);
     }
-
-    const receiptPath = `uploads/receipts/${receipt.filename}`;
-
-    console.log("✅ Creating deposit with:", {
-      id: uuidv4(),
-      user_id: user.id,
-      amount: parseFloat(amount),
-      phone_number: phone,
-      receipt_url: receiptPath,
-      date: new Date(),
-      status: "pending",
-    });
 
     await Deposit.create({
       id: uuidv4(),
       user_id: user.id,
       amount: parseFloat(amount),
       phone_number: phone,
-      receipt_url: receiptPath,
+      receipt_url: receiptUrl, // ✅ save Cloudinary URL
       date: new Date(),
       status: "pending",
     });
 
     console.log("✅ Deposit successfully saved to DB");
-
     return res.status(201).json({ message: "Deposit request created" });
   } catch (error) {
     console.error("Deposit error:", error);
@@ -97,12 +70,10 @@ exports.deposit = async (req, res) => {
   }
 };
 
-  
-
-// ✅ Withdraw Handler
+// ✅ Cashout Handler (UPDATED to use receiptUrl from frontend)
 exports.cashout = async (req, res) => {
-  const { telegram_id, amount, phone_number } = req.body;
-  console.log("📥 Withdraw request received:", { telegram_id, amount, phone_number });
+  const { telegram_id, amount, phone_number, receiptUrl } = req.body; // ✅ receiptUrl added
+  console.log("📥 Cashout request received:", { telegram_id, amount, phone_number, receiptUrl });
 
   if (!telegram_id || !amount || amount <= 0) {
     return res.status(400).json({ success: false, message: "Invalid request" });
@@ -112,15 +83,12 @@ exports.cashout = async (req, res) => {
 
   try {
     const user = await User.findOne({ where: { telegram_id: String(telegram_id) }, transaction: t });
-
     if (!user) {
-      console.log("❌ User not found:", telegram_id);
       await t.rollback();
       return res.status(404).json({ success: false, message: "User not found" });
     }
 
     if (user.balance < amount) {
-      console.log("❌ Insufficient balance for user:", user.id);
       await t.rollback();
       return res.status(400).json({ success: false, message: "Insufficient balance" });
     }
@@ -131,10 +99,10 @@ exports.cashout = async (req, res) => {
 
     // Create cashout
     const cashout = await Cashout.create({
-      user_id: user.id, // Make sure this matches UUID type in DB
+      user_id: user.id,
       phone_number: phone_number || user.phone_number,
       amount: parseFloat(amount),
-      receipt: "",
+      receipt: receiptUrl || "", // ✅ save Cloudinary URL
       status: "pending",
       date: new Date(),
     }, { transaction: t });
@@ -147,15 +115,14 @@ exports.cashout = async (req, res) => {
       message: "Withdrawal successful",
       balance: user.balance,
     });
-
-  } catch (error) {
+    } catch (error) {
     await t.rollback();
-    console.error("🔥 Withdraw error:", error);
+    console.error("🔥 Cashout error:", error);
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
 
-// ✅ Transfer Handler
+// ✅ Transfer Handler (unchanged)
 exports.transfer = async (req, res) => {
   const { from_telegram_id, to_telegram_id, amount } = req.body;
 
@@ -179,7 +146,9 @@ exports.transfer = async (req, res) => {
     receiver.balance += amount;
 
     await sender.save();
-    await receiver.save();res.status(200).json({
+    await receiver.save();
+
+    res.status(200).json({
       message: "Transfer successful",
       senderBalance: sender.balance,
       receiverBalance: receiver.balance,
@@ -201,7 +170,7 @@ exports.getMe = async (req, res) => {
   try {
     const user = await User.findOne({
       where: { telegram_id: String(telegram_id) },
-      attributes: ["username", "profile_picture","balance"],
+      attributes: ["username", "profile_picture", "balance"],
     });
 
     if (!user) {
