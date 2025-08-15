@@ -1,220 +1,158 @@
-const { User, Deposit, Cashout } = require("../models");
-const { v4: uuidv4 } = require("uuid");
+// userController.js
 
-// ==============================
-// ✅ Telegram Authentication Handler (unchanged)
-// ==============================
-exports.telegramAuth = async (req, res) => {
-  const { telegram_id, phone_number, username, profile_picture } = req.body;
+const { User, Deposit, Cashout } = require("../models"); // adjust if your models are in a different folder
+const cloudinary = require("../cloudinary"); // make sure cloudinary.js is in the correct path
 
-  if (!telegram_id || !phone_number) {
-    return res.status(400).json({ message: "telegram_id and phone_number are required." });
-  }
-
-  try {
-    const stringTelegramId = String(telegram_id);
-    let user = await User.findOne({ where: { telegram_id: stringTelegramId } });
-
-    if (user) {
-      return res.status(200).json({ message: "Login successful", user });
-    } else {
-      const newUser = await User.create({
-        id: uuidv4(),
-        telegram_id: stringTelegramId,
-        phone_number,
-        username: username || `TG_${stringTelegramId}`,
-        profile_picture: profile_picture || null,
-        balance: 0,
-      });
-
-      return res.status(201).json({ message: "User registered", user: newUser });
-    }
-  } catch (error) {
-    console.error("Telegram auth error:", error);
-    return res.status(500).json({ message: "Internal server error", error: error.message });
-  }
-};
-
-// ==============================
-// ✅ Deposit Handler (unchanged from your updated version)
-// ==============================
+// ==========================
+// Create Deposit Request
+// ==========================
 exports.deposit = async (req, res) => {
   try {
-    const { amount, phone, receiptUrl } = req.body;
-    const telegram_id = req.headers["telegram_id"];
+    const { amount, phone } = req.body;
 
-    console.log("📥 Deposit request:", { amount, phone, telegram_id, receiptUrl });
-
-    if (!amount || !phone || !receiptUrl) {
-      return res.status(400).json({ message: "Missing required fields" });
+    // Check if a receipt file is uploaded
+    let receiptUrl = "";
+    if (req.files?.receipt) {
+      const file = req.files.receipt;
+      const uploaded = await cloudinary.uploader.upload(file.tempFilePath, {
+        folder: "bingo_deposit_receipts",
+      });
+      receiptUrl = uploaded.secure_url; // full Cloudinary URL
     }
 
-    let user = await User.findOne({ where: { telegram_id: String(telegram_id) } });
-    if (!user) {
-      user = await User.create({ telegram_id: String(telegram_id), balance: 0 });
-      console.log("✅ New user created automatically:", user.id);
-    }
-
-    await Deposit.create({
-      id: uuidv4(),
-      user_id: user.id,
-      amount: parseFloat(amount),
-      phone_number: phone,
+    // Save deposit in DB
+    const deposit = await Deposit.create({
+      user_id: req.user.id,
+      amount,
+      phone,
       receipt_url: receiptUrl,
-      date: new Date(),
       status: "pending",
     });
 
-    console.log("✅ Deposit successfully saved to DB");
-    return res.status(201).json({ message: "Deposit request created" });
+    res.status(201).json({ message: "Deposit request created", deposit });
   } catch (error) {
     console.error("Deposit error:", error);
-    res.status(500).json({ message: "Internal server error", error: error.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 
-// ==============================
-// ✅ Cashout Handler (FIXED: no balance deduction here)
-// ==============================
-// ==============================
-// Cashout Handler (user request) ✅ Balance deducted immediately
-// ==============================
+// ==========================
+// Create Cashout Request
+// ==========================
 exports.cashout = async (req, res) => {
-  const { telegram_id, amount, phone_number, receiptUrl } = req.body;
-  console.log("📥 Cashout request received:", { telegram_id, amount, phone_number, receiptUrl });
-
-  if (!telegram_id || !amount || amount <= 0) {
-    return res.status(400).json({ success: false, message: "Invalid request" });
-  }
-
-  const t = await User.sequelize.transaction();
-
   try {
-    const user = await User.findOne({ where: { telegram_id: String(telegram_id) }, transaction: t });
-    if (!user) {
-      await t.rollback();
-      return res.status(404).json({ success: false, message: "User not found" });
+    const { amount, phone } = req.body;
+
+    // Check if a receipt file is uploaded
+    let receiptUrl = "";
+    if (req.files?.receipt) {
+      const file = req.files.receipt;
+      const uploaded = await cloudinary.uploader.upload(file.tempFilePath, {
+        folder: "bingo_cashout_receipts",
+      });
+      receiptUrl = uploaded.secure_url; // full Cloudinary URL
     }
 
-    if (user.balance < amount) {
-      await t.rollback();
-      return res.status(400).json({ success: false, message: "Insufficient balance" });
-    }
-
-    // 🔹 Deduct balance immediately during request
-    user.balance -= amount;
-    await user.save({ transaction: t });
-
-    // 🔹 Create cashout record with status "pending"
+    // Save cashout in DB
     const cashout = await Cashout.create({
-      user_id: user.id,
-      phone_number: phone_number || user.phone_number,
-      amount: parseFloat(amount),
-      receipt: receiptUrl || "", // optional receipt URL
-      status: "pending", // Agent will approve later
-      date: new Date(),
-    }, { transaction: t });
-
-    await t.commit();
-
-    console.log("✅ Cashout created successfully (pending approval):", cashout.toJSON());
-    return res.status(200).json({
-      success: true,
-      message: "Withdrawal request submitted",
-      balance: user.balance,
+      user_id: req.user.id,
+      amount,
+      phone,
+      receipt: receiptUrl,
+      status: "pending",
     });
+
+    res.status(201).json({ message: "Cashout request created", cashout });
   } catch (error) {
-    await t.rollback();
-    console.error("🔥 Cashout error:", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
+    console.error("Cashout error:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 
-// ==============================
-// Agent Approve Cashout Handler ✅ Only updates status
-// ==============================
-exports.approveCashout = async (req, res) => {
-  const { cashoutId } = req.body;
-
-  if (!cashoutId) return res.status(400).json({ success: false, message: "cashoutId required" });
-
+// ==========================
+// Approve Deposit (Agent)
+// ==========================
+exports.approveDeposit = async (req, res) => {
   try {
-    const cashout = await Cashout.findOne({ where: { id: cashoutId } });
-    if (!cashout) return res.status(404).json({ success: false, message: "Cashout not found" });
+    const { depositId } = req.body;
+    const deposit = await Deposit.findByPk(depositId);
 
-    // 🔹 Only update status, do NOT touch user.balance
+    if (!deposit) return res.status(404).json({ error: "Deposit not found" });
+
+    deposit.status = "approved";
+    await deposit.save();
+
+    res.json({ message: "Deposit approved", deposit });
+  } catch (error) {
+    console.error("Approve deposit error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// ==========================
+// Approve Cashout (Agent)
+// ==========================
+exports.approveCashout = async (req, res) => {
+  try {
+    const { cashoutId } = req.body;
+    const cashout = await Cashout.findByPk(cashoutId);
+
+    if (!cashout) return res.status(404).json({ error: "Cashout not found" });
+
+    // If agent uploads a receipt proof for cashout
+    if (req.files?.receipt) {
+      const file = req.files.receipt;
+      const uploaded = await cloudinary.uploader.upload(file.tempFilePath, {
+        folder: "agent_cashout_receipts",
+      });
+      cashout.receipt = uploaded.secure_url;
+    }
+
     cashout.status = "approved";
     await cashout.save();
 
-    res.status(200).json({ success: true, message: "Cashout approved" });
+    res.json({ message: "Cashout approved", cashout });
   } catch (error) {
-    console.error("🔥 Approve cashout error:", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
+    console.error("Approve cashout error:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 
-// ==============================
-// ✅ Transfer Handler (unchanged)
-// ==============================
-exports.transfer = async (req, res) => {
-  const { from_telegram_id, to_telegram_id, amount } = req.body;
-
-  if (!from_telegram_id || !to_telegram_id || !amount || amount <= 0) {
-    return res.status(400).json({ message: "Invalid request" });
-  }
-
+// ==========================
+// Reject Deposit (Agent)
+// ==========================
+exports.rejectDeposit = async (req, res) => {
   try {
-    const sender = await User.findOne({ where: { telegram_id: String(from_telegram_id) } });
-    const receiver = await User.findOne({ where: { telegram_id: String(to_telegram_id) } });
+    const { depositId } = req.body;
+    const deposit = await Deposit.findByPk(depositId);
 
-    if (!sender || !receiver) {
-      return res.status(404).json({ message: "Sender or receiver not found" });
-    }
+    if (!deposit) return res.status(404).json({ error: "Deposit not found" });
 
-    if (sender.balance < amount) {
-      return res.status(400).json({ message: "Insufficient balance" });
-    }
+    deposit.status = "rejected";
+    await deposit.save();
 
-    sender.balance -= amount;
-    receiver.balance += amount;
-
-    await sender.save();
-    await receiver.save();
-
-    res.status(200).json({
-      message: "Transfer successful",
-      senderBalance: sender.balance,
-      receiverBalance: receiver.balance,
-    });
+    res.json({ message: "Deposit rejected", deposit });
   } catch (error) {
-    console.error("Transfer error:", error);
-    res.status(500).json({ message: "Internal server error" });
+    console.error("Reject deposit error:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 };
-
-// ==============================
-// ✅ Get User Profile (unchanged)
-// ==============================
-exports.getMe = async (req, res) => {
-  const { telegram_id } = req.query;
-
-  if (!telegram_id) {
-    return res.status(400).json({ message: "telegram_id is required" });
-  }
-
+// ==========================
+// Reject Cashout (Agent)
+// ==========================
+exports.rejectCashout = async (req, res) => {
   try {
-    const user = await User.findOne({
-      where: { telegram_id: String(telegram_id) },
-      attributes: ["username", "profile_picture", "balance"],
-    });
+    const { cashoutId } = req.body;
+    const cashout = await Cashout.findByPk(cashoutId);
 
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
+    if (!cashout) return res.status(404).json({ error: "Cashout not found" });
 
-    res.status(200).json({ user });
+    cashout.status = "rejected";
+    await cashout.save();
+
+    res.json({ message: "Cashout rejected", cashout });
   } catch (error) {
-    console.error("getMe error:", error);
-    res.status(500).json({ message: "Internal server error" });
+    console.error("Reject cashout error:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 };
