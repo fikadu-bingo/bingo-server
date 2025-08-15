@@ -1,3 +1,5 @@
+
+require("dotenv").config(); // ✅ Load .env locally
 const express = require("express");
 const testRoutes = require('./routes/test');
 
@@ -34,7 +36,7 @@ app.use(
   })
 );
 app.use(express.json());
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+//app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/game", gameRoutes);
@@ -184,6 +186,8 @@ function stopAndResetCountdown(stake) {
 }
 async function checkForWinner(stake) {
   const game = games[stake];
+  if (!game) return;
+
   for (const player of game.players) {
     const ticket = game.tickets[player.userId];
     if (!ticket) continue;
@@ -210,7 +214,7 @@ async function checkForWinner(stake) {
 
       try {
         await sequelize.transaction(async (t) => {
-          // Winner
+          // WINNER
           const winner = await User.findOne({ where: { id: player.userId }, transaction: t });
           if (!winner) throw new Error("Winner user not found");
 
@@ -218,25 +222,25 @@ async function checkForWinner(stake) {
           if (winner.balance < 0) winner.balance = 0;
           await winner.save({ transaction: t });
 
-          // Losers
+          // Emit only to the winner's socket room
+          io.to(`user_${winner.id}`).emit("balanceChange", {
+            userId: winner.id,
+            newBalance: winner.balance,
+          });
+
+          // LOSERS
           const losersRecords = await User.findAll({ where: { id: losers }, transaction: t });
           for (const loser of losersRecords) {
             loser.balance = loser.balance - stakeNum;
             if (loser.balance < 0) loser.balance = 0;
             await loser.save({ transaction: t });
 
-            // Emit individual loser balance change
-            io.to(`bingo_${stake}`).emit("balanceChange", {
+            // Emit only to each loser's socket room
+            io.to(`user_${loser.id}`).emit("balanceChange", {
               userId: loser.id,
               newBalance: loser.balance,
             });
           }
-
-          // Emit winner balance change
-          io.to(`bingo_${stake}`).emit("balanceChange", {
-            userId: winner.id,
-            newBalance: winner.balance,
-          });
         });
       } catch (error) {
         console.error("Error updating balances on bingoWin:", error);
