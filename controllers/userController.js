@@ -76,6 +76,9 @@ exports.deposit = async (req, res) => {
 // ==============================
 // ✅ Cashout Handler (FIXED: no balance deduction here)
 // ==============================
+// ==============================
+// Cashout Handler (user request) ✅ Balance deducted immediately
+// ==============================
 exports.cashout = async (req, res) => {
   const { telegram_id, amount, phone_number, receiptUrl } = req.body;
   console.log("📥 Cashout request received:", { telegram_id, amount, phone_number, receiptUrl });
@@ -84,35 +87,68 @@ exports.cashout = async (req, res) => {
     return res.status(400).json({ success: false, message: "Invalid request" });
   }
 
+  const t = await User.sequelize.transaction();
+
   try {
-    const user = await User.findOne({ where: { telegram_id: String(telegram_id) } });
+    const user = await User.findOne({ where: { telegram_id: String(telegram_id) }, transaction: t });
     if (!user) {
+      await t.rollback();
       return res.status(404).json({ success: false, message: "User not found" });
     }
 
     if (user.balance < amount) {
+      await t.rollback();
       return res.status(400).json({ success: false, message: "Insufficient balance" });
     }
 
-    // ❌ Removed: balance deduction here
-    // ✅ We only create a pending cashout request, deduction happens at admin approval
+    // 🔹 Deduct balance immediately during request
+    user.balance -= amount;
+    await user.save({ transaction: t });
 
+    // 🔹 Create cashout record with status "pending"
     const cashout = await Cashout.create({
       user_id: user.id,
       phone_number: phone_number || user.phone_number,
       amount: parseFloat(amount),
-      receipt: receiptUrl || "",
-      status: "pending", // ✅ pending until approved
+      receipt: receiptUrl || "", // optional receipt URL
+      status: "pending", // Agent will approve later
       date: new Date(),
-    });
+    }, { transaction: t });
 
-    console.log("✅ Cashout request created (pending admin approval):", cashout.toJSON());
-    return res.status(200).json({success: true,
-      message: "Withdrawal request submitted, awaiting approval",
-      balance: user.balance, // unchanged balance
+    await t.commit();
+
+    console.log("✅ Cashout created successfully (pending approval):", cashout.toJSON());
+    return res.status(200).json({
+      success: true,
+      message: "Withdrawal request submitted",
+      balance: user.balance,
     });
   } catch (error) {
+    await t.rollback();
     console.error("🔥 Cashout error:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+// ==============================
+// Agent Approve Cashout Handler ✅ Only updates status
+// ==============================
+exports.approveCashout = async (req, res) => {
+  const { cashoutId } = req.body;
+
+  if (!cashoutId) return res.status(400).json({ success: false, message: "cashoutId required" });
+
+  try {
+    const cashout = await Cashout.findOne({ where: { id: cashoutId } });
+    if (!cashout) return res.status(404).json({ success: false, message: "Cashout not found" });
+
+    // 🔹 Only update status, do NOT touch user.balance
+    cashout.status = "approved";
+    await cashout.save();
+
+    res.status(200).json({ success: true, message: "Cashout approved" });
+  } catch (error) {
+    console.error("🔥 Approve cashout error:", error);
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
