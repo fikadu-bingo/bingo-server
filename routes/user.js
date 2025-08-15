@@ -28,19 +28,21 @@ router.post("/telegram-auth", telegramAuth);
 
 // ------------------------------
 // Deposit route with receipt upload
+// Frontend should first upload receipt to /upload-receipt
+// Then send deposit request with receiptUrl
 // ------------------------------
-// Frontend first uploads file to /upload-receipt
-// Then sends deposit request with receiptUrl
-router.post("/deposit", uploadCloud.single("receipt"), deposit);
+router.post("/deposit", deposit);
 
+// ------------------------------
 // Transfer route
+// ------------------------------
 router.post("/transfer", transfer);
 
 // ------------------------------
-// Cashout route with optional receipt upload
+// Cashout route
+// Frontend should first upload receipt to /upload-receipt (type=cashout)
+// Then send cashout request with receiptUrl
 // ------------------------------
-// Frontend first uploads file to /upload-receipt (type=cashout)
-// Then sends cashout request with receiptUrl
 router.post("/cashout", cashout);
 
 // ------------------------------
@@ -61,10 +63,12 @@ router.post("/upload-receipt", uploadCloud.single("receipt"), async (req, res) =
         : "bingo_other_receipts";
 
     // Upload to Cloudinary via stream
-    cloudinary.uploader.upload_stream({ folder }, (err, result) => {
+    const stream = cloudinary.uploader.upload_stream({ folder }, (err, result) => {
       if (err) return res.status(500).json({ message: "Upload failed", error: err });
       res.json({ url: result.secure_url }); // ✅ Return URL to frontend
-    }).end(req.file.buffer);
+    });
+
+    stream.end(req.file.buffer);
   } catch (err) {
     res.status(500).json({ message: "Upload failed", error: err.message });
   }
