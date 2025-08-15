@@ -102,46 +102,46 @@ exports.deposit = async (req, res) => {
 // ✅ Withdraw Handler
 exports.cashout = async (req, res) => {
   const { telegram_id, amount, phone_number } = req.body;
-
-  // ✅ Log: Incoming request data
   console.log("📥 Withdraw request received:", { telegram_id, amount, phone_number });
 
   if (!telegram_id || !amount || amount <= 0) {
     return res.status(400).json({ success: false, message: "Invalid request" });
   }
 
-  try {
-    const user = await User.findOne({ where: { telegram_id: String(telegram_id) } });
+  const t = await User.sequelize.transaction();
 
-    // ✅ Log: User lookup result
+  try {
+    const user = await User.findOne({ where: { telegram_id: String(telegram_id) }, transaction: t });
+
     if (!user) {
       console.log("❌ User not found:", telegram_id);
+      await t.rollback();
       return res.status(404).json({ success: false, message: "User not found" });
     }
 
     if (user.balance < amount) {
       console.log("❌ Insufficient balance for user:", user.id);
+      await t.rollback();
       return res.status(400).json({ success: false, message: "Insufficient balance" });
     }
 
+    // Deduct balance
     user.balance -= amount;
-    await user.save();
+    await user.save({ transaction: t });
 
-    // ✅ Log: Balance after deduction
-    console.log("💰 New balance after deduction:", user.balance);
-
+    // Create cashout
     const cashout = await Cashout.create({
-      user_id: user.id,
+      user_id: user.id, // Make sure this matches UUID type in DB
       phone_number: phone_number || user.phone_number,
       amount: parseFloat(amount),
       receipt: "",
       status: "pending",
       date: new Date(),
-    });
+    }, { transaction: t });
 
-    // ✅ Log: Cashout successfully created
+    await t.commit();
+
     console.log("✅ Cashout created successfully:", cashout.toJSON());
-
     return res.status(200).json({
       success: true,
       message: "Withdrawal successful",
@@ -149,6 +149,7 @@ exports.cashout = async (req, res) => {
     });
 
   } catch (error) {
+    await t.rollback();
     console.error("🔥 Withdraw error:", error);
     res.status(500).json({ success: false, message: "Internal server error" });
   }
@@ -213,4 +214,3 @@ exports.getMe = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
-
