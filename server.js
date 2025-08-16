@@ -201,7 +201,7 @@ async function checkForWinner(stake) {
       const prize = Math.floor(totalStake * 0.8);
 
       io.to(`bingo_${stake}`).emit("gameWon", {
-        userId: player.userId,
+        userId: player.userId,   // still emit telegram_id to frontend
         username: player.username,
         prize
       });
@@ -215,7 +215,10 @@ async function checkForWinner(stake) {
       try {
         await sequelize.transaction(async (t) => {
           // WINNER
-          const winner = await User.findOne({ where: { id: player.userId }, transaction: t });
+          const winner = await User.findOne({
+            where: { telegram_id: player.userId },  // ✅ FIXED
+            transaction: t,
+          });
           if (!winner) throw new Error("Winner user not found");
 
           winner.balance = winner.balance - stakeNum + prize;
@@ -223,21 +226,25 @@ async function checkForWinner(stake) {
           await winner.save({ transaction: t });
 
           // Emit only to the winner's socket room
-          io.to(`user_${winner.id}`).emit("balanceChange", {
-            userId: winner.id,
+          io.to(`user_${winner.telegram_id}`).emit("balanceChange", {
+            userId: winner.telegram_id,
             newBalance: winner.balance,
           });
 
           // LOSERS
-          const losersRecords = await User.findAll({ where: { id: losers }, transaction: t });
+          const losersRecords = await User.findAll({
+            where: { telegram_id: losers },   // ✅ FIXED
+            transaction: t,
+          });
+
           for (const loser of losersRecords) {
             loser.balance = loser.balance - stakeNum;
             if (loser.balance < 0) loser.balance = 0;
             await loser.save({ transaction: t });
 
             // Emit only to each loser's socket room
-            io.to(`user_${loser.id}`).emit("balanceChange", {
-              userId: loser.id,
+            io.to(`user_${loser.telegram_id}`).emit("balanceChange", {
+              userId: loser.telegram_id,
               newBalance: loser.balance,
             });
           }
