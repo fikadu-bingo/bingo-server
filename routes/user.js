@@ -8,7 +8,7 @@ const {
   cashout,
 } = require("../controllers/userController");
 
-const { User } = require("../models");
+const { User, Deposit, Cashout } = require("../models"); // ✅ Import Deposit & Cashout models
 const cloudinary = require("../cloudinary"); // ✅ Cloudinary config
 
 const router = express.Router();
@@ -28,8 +28,6 @@ router.post("/telegram-auth", telegramAuth);
 
 // ------------------------------
 // Deposit route with receipt upload
-// Frontend should first upload receipt to /upload-receipt
-// Then send deposit request with receiptUrl
 // ------------------------------
 router.post("/deposit", deposit);
 
@@ -40,8 +38,6 @@ router.post("/transfer", transfer);
 
 // ------------------------------
 // Cashout route
-// Frontend should first upload receipt to /upload-receipt (type=cashout)
-// Then send cashout request with receiptUrl
 // ------------------------------
 router.post("/cashout", cashout);
 
@@ -96,5 +92,47 @@ router.get("/check/:telegram_id", async (req, res) => {
 // Get username & profile picture for frontend HomePage
 // ------------------------------
 router.get("/me", getMe);
+
+// ------------------------------
+// ✅ NEW: Unified transactions route
+// Returns deposit & cashout history for a user
+// ------------------------------
+router.get("/transactions/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const [deposits, cashouts] = await Promise.all([
+      Deposit.findAll({
+        where: { userId },
+        attributes: ["id", "amount", "createdAt"],
+      }),
+      Cashout.findAll({
+        where: { userId },
+        attributes: ["id", "amount", "createdAt"],
+      }),
+    ]);
+
+    // Merge & sort newest first
+    const transactions = [
+      ...deposits.map(d => ({
+        id: d.id,
+        type: "deposit",
+        amount: Number(d.amount),
+        createdAt: d.createdAt,
+      })),
+      ...cashouts.map(c => ({
+        id: c.id,
+        type: "cashout",
+        amount: Number(c.amount),
+        createdAt: c.createdAt,
+      })),
+    ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    res.json(transactions);
+  } catch (error) {
+    console.error("Transactions error:", error.message);
+    res.status(500).json({ message: "Failed to load transactions" });
+  }
+});
 
 module.exports = router;
