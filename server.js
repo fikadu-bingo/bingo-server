@@ -326,9 +326,8 @@ function resetGame(stake) {
 // ===============================
 // ✅ Bingo cartela generator for 75-ball system
 // ===============================
-function generateBingoCartela() {
+const generateCard = (selectedNumber) => {
   const cartela = [];
-
   const ranges = [
     [1, 15],   // B
     [16, 30],  // I
@@ -337,34 +336,54 @@ function generateBingoCartela() {
     [61, 75],  // O
   ];
 
+  // Determine which column the selected number belongs to
+  let selectedCol = null;
   for (let col = 0; col < 5; col++) {
     const [min, max] = ranges[col];
-    const numbers = [];
+    if (selectedNumber >= min && selectedNumber <= max) {
+      selectedCol = col;
+      break;
+    }
+  }
 
-    while (numbers.length < 5) {
+  for (let col = 0; col < 5; col++) {
+    const [min, max] = ranges[col];
+    const numbers = new Set();
+
+    // Fill column with unique random numbers from the range
+    while (numbers.size < 5) {
       const num = Math.floor(Math.random() * (max - min + 1)) + min;
-      if (!numbers.includes(num)) numbers.push(num);
+      numbers.add(num);
     }
 
-    // For N column, set center to free space
-    if (col === 2) {
-      numbers[2] = "*"; // or 0
+    const numArray = Array.from(numbers);
+
+    // Place selected number in its column (if it belongs here)
+    if (col === selectedCol) {
+      // Replace a random position (except N middle if col === 2)
+      let pos;
+      if (col === 2) pos = Math.floor(Math.random() * 5); // middle will be replaced later with *
+      else pos = Math.floor(Math.random() * 5);
+      numArray[pos] = selectedNumber;
     }
 
-    cartela.push(numbers);
+    // N column center is always free
+    if (col === 2) numArray[2] = "*";
+
+    cartela.push(numArray);
   }
 
-  // Transpose to get row-wise cartela
-  const transposed = [];
+  // Transpose columns to rows
+  const card = [];
   for (let row = 0; row < 5; row++) {
-    transposed[row] = [];
+    card[row] = [];
     for (let col = 0; col < 5; col++) {
-      transposed[row][col] = cartela[col][row];
+      card[row][col] = cartela[col][row];
     }
   }
 
-  return transposed;
-}
+  return card;
+};
 
 io.on("connection", (socket) => {
   console.log(`A user connected: ${socket.id}`);
