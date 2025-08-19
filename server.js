@@ -263,7 +263,7 @@ async function checkForWinner(stake) {
 function startCallingNumbers(stake) {
   const game = games[stake];
   if (game.callerInterval) return;
-  if (game.numbersCalled.length >= 100) return;
+  if (game.numbersCalled.length >= 75) return;
 
   game.callerInterval = setInterval(async () => {
     if (game.state !== "started") {
@@ -323,6 +323,48 @@ function resetGame(stake) {
   io.to(`bingo_${stake}`).emit("stakePlayerCount", { gameId: `bingo_${stake}`, count: 0 });
   io.to(`bingo_${stake}`).emit("gameReset");
 }
+// ===============================
+// ✅ Bingo cartela generator for 75-ball system
+// ===============================
+function generateBingoCartela() {
+  const cartela = [];
+
+  const ranges = [
+    [1, 15],   // B
+    [16, 30],  // I
+    [31, 45],  // N
+    [46, 60],  // G
+    [61, 75],  // O
+  ];
+
+  for (let col = 0; col < 5; col++) {
+    const [min, max] = ranges[col];
+    const numbers = [];
+
+    while (numbers.length < 5) {
+      const num = Math.floor(Math.random() * (max - min + 1)) + min;
+      if (!numbers.includes(num)) numbers.push(num);
+    }
+
+    // For N column, set center to free space
+    if (col === 2) {
+      numbers[2] = "*"; // or 0
+    }
+
+    cartela.push(numbers);
+  }
+
+  // Transpose to get row-wise cartela
+  const transposed = [];
+  for (let row = 0; row < 5; row++) {
+    transposed[row] = [];
+    for (let col = 0; col < 5; col++) {
+      transposed[row][col] = cartela[col][row];
+    }
+  }
+
+  return transposed;
+}
 
 io.on("connection", (socket) => {
   console.log(`A user connected: ${socket.id}`);
@@ -342,9 +384,13 @@ io.on("connection", (socket) => {
     }
 
     // Save ticket
-    if (ticket && Array.isArray(ticket) && ticket.length === 5) {
-      game.tickets[userId] = ticket;
-    }
+   // ===============================
+// Assign player ticket
+// ===============================
+if (!ticket || ticket.length !== 5) {
+  ticket = generateBingoCartela();  // <- use the new generator
+}
+game.tickets[userId] = ticket;
 
     rebuildPlayersArray(stake);
 
