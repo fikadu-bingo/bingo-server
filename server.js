@@ -275,7 +275,7 @@ function startCallingNumbers(stake) {
     let tries = 0;
     let newNumber = null;
     while (tries < 500) {
-      const candidate = Math.floor(Math.random() * 100) + 1;
+      const candidate = Math.floor(Math.random() * 75) + 1;
       if (!game.numbersCalled.includes(candidate)) {
         newNumber = candidate;
         break;
