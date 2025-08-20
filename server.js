@@ -323,11 +323,13 @@ function resetGame(stake) {
   io.to(`bingo_${stake}`).emit("stakePlayerCount", { gameId: `bingo_${stake}`, count: 0 });
   io.to(`bingo_${stake}`).emit("gameReset");
 }
-// ===============================
+
 // ✅ Bingo cartela generator for 75-ball system
 // ===============================
-const generateCard = (selectedNumber) => {
-  const cartela = [];
+function generateBingoTicket() {
+  const ticket = [];
+
+  // Each column has its own range
   const ranges = [
     [1, 15],   // B
     [16, 30],  // I
@@ -336,98 +338,70 @@ const generateCard = (selectedNumber) => {
     [61, 75],  // O
   ];
 
-  // Determine which column the selected number belongs to
-  let selectedCol = null;
   for (let col = 0; col < 5; col++) {
     const [min, max] = ranges[col];
-    if (selectedNumber >= min && selectedNumber <= max) {
-      selectedCol = col;
-      break;
-    }
-  }
+    const numbers = [];
 
-  for (let col = 0; col < 5; col++) {
-    const [min, max] = ranges[col];
-    const numbers = new Set();
-
-    // Fill column with unique random numbers from the range
-    while (numbers.size < 5) {
+    while (numbers.length < 5) {
       const num = Math.floor(Math.random() * (max - min + 1)) + min;
-      numbers.add(num);
+      if (!numbers.includes(num)) numbers.push(num);
     }
 
-    const numArray = Array.from(numbers);
+    // Sort each column ascending
+    numbers.sort((a, b) => a - b);
 
-    // Place selected number in its column (if it belongs here)
-    if (col === selectedCol) {
-      // Replace a random position (except N middle if col === 2)
-      let pos;
-      if (col === 2) pos = Math.floor(Math.random() * 5); // middle will be replaced later with *
-      else pos = Math.floor(Math.random() * 5);
-      numArray[pos] = selectedNumber;
-    }
-
-    // N column center is always free
-    if (col === 2) numArray[2] = "*";
-
-    cartela.push(numArray);
+    ticket.push(numbers);
   }
 
-  // Transpose columns to rows
-  const card = [];
-  for (let row = 0; row < 5; row++) {
-    card[row] = [];
-    for (let col = 0; col < 5; col++) {
-      card[row][col] = cartela[col][row];
-    }
-  }
+  // Free space in center (row 2, col 2)
+  ticket[2][2] = "★";
 
-  return card;
-};
-
+  return ticket;
+}
 io.on("connection", (socket) => {
   console.log(`A user connected: ${socket.id}`);
 
-  socket.on("joinGame", ({ userId, username = "Player", stake, ticket } = {}) => {
-    if (!userId || !stake || !STAKE_GROUPS.includes(Number(stake))) {
-      return socket.emit("error", { message: "joinGame requires valid userId and stake" });
-    }
+socket.on("joinGame", ({ userId, username = "Player", stake, ticket } = {}) => {
+  if (!userId || !stake || !STAKE_GROUPS.includes(Number(stake))) {
+    return socket.emit("error", { message: "joinGame requires valid userId and stake" });
+  }
 
-    const game = games[stake];
+  const game = games[stake];
 
-    // Add or update player
-    if (game.playersMap.has(userId)) {
-      game.playersMap.get(userId).socketIds.add(socket.id);
-    } else {
-      game.playersMap.set(userId, { username, socketIds: new Set([socket.id]) });
-    }
+  // Add or update player
+  if (game.playersMap.has(userId)) {
+    game.playersMap.get(userId).socketIds.add(socket.id);
+  } else {
+    game.playersMap.set(userId, { username, socketIds: new Set([socket.id]) });
+  }
 
-    // Save ticket
-   // ===============================
-// Assign player ticket
-// ===============================
-if (!ticket || ticket.length !== 5) {
-  ticket = generateBingoCartela();  // <- use the new generator
-}
-game.tickets[userId] = ticket;
+  // ===============================
+  // Assign player ticket
+  // ===============================
+  if (!ticket || ticket.length !== 5) {
+    ticket = generateBingoTicket(); // your server-side card generator
+  }
+  game.tickets[userId] = ticket;
 
-    rebuildPlayersArray(stake);
+  // 🔹 Emit assigned ticket to this user only
+  io.to(socket.id).emit("ticketAssigned", { ticket });
 
-    socket.join(`bingo_${stake}`);
-    console.log(`✅ User ${userId} (${socket.id}) joined bingo_${stake}`);
+  rebuildPlayersArray(stake);
 
-    broadcastPlayerInfo(stake);
-    broadcastWinAmount(stake);
+  socket.join(`bingo_${stake}`);
+  console.log(`✅ User ${userId} (${socket.id}) joined bingo_${stake}`);
 
-    if (game.players.length >= 2 && game.state === "waiting") {
-      startCountdownIfNeeded(stake);
-    } else if (game.state === "countdown") {
-      socket.emit("countdownUpdate", game.currentCountdown);
-    }
+  broadcastPlayerInfo(stake);
+  broadcastWinAmount(stake);
 
-    socket.emit("gameStateUpdate", { state: game.state, countdown: game.currentCountdown });
-  });
+  if (game.players.length >= 2 && game.state === "waiting") {
+    startCountdownIfNeeded(stake);
+  } else if (game.state === "countdown") {
+    socket.emit("countdownUpdate", game.currentCountdown);
+  }
 
+  socket.emit("gameStateUpdate", { state: game.state, countdown: game.currentCountdown });
+});
   socket.on("leaveGame", ({ userId, stake } = {}) => {
     if (!userId || !stake || !STAKE_GROUPS.includes(Number(stake))) return;
 
