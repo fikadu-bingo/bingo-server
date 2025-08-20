@@ -1,8 +1,6 @@
-
 require("dotenv").config(); // ✅ Load .env locally
 const express = require("express");
 const testRoutes = require('./routes/test');
-
 
 const http = require("http");
 const { Server } = require("socket.io");
@@ -20,7 +18,6 @@ const userRoutes = require("./routes/user");
 const agentRoutes = require("./routes/agentRoutes");
 const promocodeRoutes = require('./routes/promocode');
 const promoterRoutes = require('./routes/promoter');
-//const agentAuthRoutes = require('./routes/agent');
 
 const app = express();
 const server = http.createServer(app);
@@ -36,14 +33,12 @@ app.use(
   })
 );
 app.use(express.json());
-//app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/game", gameRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/agent", agentRoutes);
 app.use("/api/admin", adminRoutes);
-//app.use("/api/agent", agentAuthRoutes);
 app.use("/api/promocode", promocodeRoutes);
 app.use("/api/promoter", promoterRoutes);
 app.use('/api', testRoutes);
@@ -66,16 +61,17 @@ const STAKE_GROUPS = [10, 20, 50, 100, 200];
 const games = {};
 for (const stake of STAKE_GROUPS) {
   games[stake] = {
-    playersMap: new Map(),   // userId -> { username, socketIds: Set }
-    players: [],             // array for broadcasting
-    tickets: {},             // userId -> 5x5 ticket array
-    numbersCalled: [],       // called numbers for this game
-    state: "waiting",        // waiting | countdown | started | ended
+    playersMap: new Map(),
+    players: [],
+    tickets: {},
+    numbersCalled: [],
+    state: "waiting",
     countdown: 50,
     currentCountdown: 50,
     countdownInterval: null,
     callerInterval: null,
     stakePerPlayer: stake,
+    selectedNumbers: {}, // <-- added for live marking
   };
 }
 
@@ -139,13 +135,12 @@ function startCountdownIfNeeded(stake) {
   const game = games[stake];
   if (game.countdownInterval) return;
   if (game.state !== "waiting") return;
-  if (game.players.length < 2) return; // Only start if at least 2 players
+  if (game.players.length < 2) return;
   game.state = "countdown";
   let counter = typeof game.countdown === "number" ? game.countdown : 50;
   game.currentCountdown = counter;
 
   io.to(`bingo_${stake}`).emit("countdownUpdate", counter);
-
   game.countdownInterval = setInterval(() => {
     if (game.players.length < 2) {
       clearInterval(game.countdownInterval);
@@ -184,6 +179,7 @@ function stopAndResetCountdown(stake) {
   game.currentCountdown = 50;
   io.to(`bingo_${stake}`).emit("countdownStopped", game.currentCountdown);
 }
+
 async function checkForWinner(stake) {
   const game = games[stake];
   if (!game) return;
@@ -193,7 +189,6 @@ async function checkForWinner(stake) {
     if (!ticket) continue;
 
     if (checkBingo(ticket, game.numbersCalled)) {
-      // Winner found
       game.state = "ended";
 
       const stakeNum = Number(game.stakePerPlayer) || 0;
@@ -201,7 +196,7 @@ async function checkForWinner(stake) {
       const prize = Math.floor(totalStake * 0.8);
 
       io.to(`bingo_${stake}`).emit("gameWon", {
-        userId: player.userId,   // still emit telegram_id to frontend
+        userId: player.userId,
         username: player.username,
         prize
       });
@@ -214,9 +209,8 @@ async function checkForWinner(stake) {
 
       try {
         await sequelize.transaction(async (t) => {
-          // WINNER
           const winner = await User.findOne({
-            where: { telegram_id: player.userId },  // ✅ FIXED
+            where: { telegram_id: player.userId },
             transaction: t,
           });
           if (!winner) throw new Error("Winner user not found");
@@ -225,15 +219,13 @@ async function checkForWinner(stake) {
           if (winner.balance < 0) winner.balance = 0;
           await winner.save({ transaction: t });
 
-          // Emit only to the winner's socket room
           io.to(`user_${winner.telegram_id}`).emit("balanceChange", {
             userId: winner.telegram_id,
             newBalance: winner.balance,
           });
 
-          // LOSERS
           const losersRecords = await User.findAll({
-            where: { telegram_id: losers },   // ✅ FIXED
+            where: { telegram_id: losers },
             transaction: t,
           });
 
@@ -242,7 +234,6 @@ async function checkForWinner(stake) {
             if (loser.balance < 0) loser.balance = 0;
             await loser.save({ transaction: t });
 
-            // Emit only to each loser's socket room
             io.to(`user_${loser.telegram_id}`).emit("balanceChange", {
               userId: loser.telegram_id,
               newBalance: loser.balance,
@@ -253,13 +244,12 @@ async function checkForWinner(stake) {
         console.error("Error updating balances on bingoWin:", error);
       }
 
-      // Reset game after 15 seconds
       setTimeout(() => resetGame(stake), 15000);
-
       break;
     }
   }
 }
+
 function startCallingNumbers(stake) {
   const game = games[stake];
   if (game.callerInterval) return;
@@ -290,7 +280,6 @@ function startCallingNumbers(stake) {
       setTimeout(() => resetGame(stake), 5000);
       return;
     }
-
     game.numbersCalled.push(newNumber);
     io.to(`bingo_${stake}`).emit("numberCalled", newNumber);
 
@@ -318,90 +307,96 @@ function resetGame(stake) {
   game.state = "waiting";
   game.countdown = 50;
   game.currentCountdown = 50;
-  // stakePerPlayer remains the same
+  game.selectedNumbers = {};
 
   io.to(`bingo_${stake}`).emit("stakePlayerCount", { gameId: `bingo_${stake}`, count: 0 });
   io.to(`bingo_${stake}`).emit("gameReset");
 }
 
-// ✅ Bingo cartela generator for 75-ball system
-// ===============================
+// ✅ Fixed Bingo ticket generator (row-major)
 function generateBingoTicket() {
-  const ticket = [];
-
-  // Each column has its own range
+  const ticket = Array.from({ length: 5 }, () => Array(5).fill(0));
   const ranges = [
-    [1, 15],   // B
-    [16, 30],  // I
-    [31, 45],  // N
-    [46, 60],  // G
-    [61, 75],  // O
+    [1, 15], [16, 30], [31, 45], [46, 60], [61, 75],
   ];
 
   for (let col = 0; col < 5; col++) {
-    const [min, max] = ranges[col];
-    const numbers = [];
-
-    while (numbers.length < 5) {
-      const num = Math.floor(Math.random() * (max - min + 1)) + min;
-      if (!numbers.includes(num)) numbers.push(num);
+    const nums = [];
+    while (nums.length < 5) {
+      const n = Math.floor(Math.random() * (ranges[col][1] - ranges[col][0] + 1)) + ranges[col][0];
+      if (!nums.includes(n)) nums.push(n);
     }
+    nums.sort((a, b) => a - b);
 
-    // Sort each column ascending
-    numbers.sort((a, b) => a - b);
-
-    ticket.push(numbers);
+    for (let row = 0; row < 5; row++) {
+      ticket[row][col] = nums[row];
+    }
   }
 
-  // Free space in center (row 2, col 2)
-  ticket[2][2] = "★";
-
+  ticket[2][2] = "★"; // free space
   return ticket;
 }
+
 io.on("connection", (socket) => {
   console.log(`A user connected: ${socket.id}`);
 
-socket.on("joinGame", ({ userId, username = "Player", stake, ticket } = {}) => {
-  if (!userId || !stake || !STAKE_GROUPS.includes(Number(stake))) {
-    return socket.emit("error", { message: "joinGame requires valid userId and stake" });
-  }
+  socket.on("joinGame", ({ userId, username = "Player", stake, ticket } = {}) => {
+    if (!userId || !stake || !STAKE_GROUPS.includes(Number(stake))) {
+      return socket.emit("error", { message: "joinGame requires valid userId and stake" });
+    }
 
-  const game = games[stake];
+    const game = games[stake];
 
-  // Add or update player
-  if (game.playersMap.has(userId)) {
-    game.playersMap.get(userId).socketIds.add(socket.id);
-  } else {
-    game.playersMap.set(userId, { username, socketIds: new Set([socket.id]) });
-  }
+    if (game.playersMap.has(userId)) {
+      game.playersMap.get(userId).socketIds.add(socket.id);
+    } else {
+      game.playersMap.set(userId, { username, socketIds: new Set([socket.id]) });
+    }
 
-  // ===============================
-  // Assign player ticket
-  // ===============================
-  if (!ticket || ticket.length !== 5) {
-    ticket = generateBingoTicket(); // your server-side card generator
-  }
-  game.tickets[userId] = ticket;
+    if (!ticket || ticket.length !== 5) {
+      ticket = generateBingoTicket();
+    }
+    game.tickets[userId] = ticket;
 
-  // 🔹 Emit assigned ticket to this user only
-  io.to(socket.id).emit("ticketAssigned", { ticket });
+    io.to(socket.id).emit("ticketAssigned", { ticket });
 
-  rebuildPlayersArray(stake);
+    rebuildPlayersArray(stake);
 
-  socket.join(`bingo_${stake}`);
-  console.log(`✅ User ${userId} (${socket.id}) joined bingo_${stake}`);
+    socket.join(`bingo_${stake}`);
+    console.log(`✅ User ${userId} (${socket.id}) joined bingo_${stake}`);
 
-  broadcastPlayerInfo(stake);
-  broadcastWinAmount(stake);
+    broadcastPlayerInfo(stake);
+    broadcastWinAmount(stake);
 
-  if (game.players.length >= 2 && game.state === "waiting") {
-    startCountdownIfNeeded(stake);
-  } else if (game.state === "countdown") {
-    socket.emit("countdownUpdate", game.currentCountdown);
-  }
+    if (game.players.length >= 2 && game.state === "waiting") {
+      startCountdownIfNeeded(stake);
+    } else if (game.state === "countdown") {
+      socket.emit("countdownUpdate", game.currentCountdown);
+    }
 
-  socket.emit("gameStateUpdate", { state: game.state, countdown: game.currentCountdown });
-});
+    socket.emit("gameStateUpdate", { state: game.state, countdown: game.currentCountdown });
+  });
+
+  // ================== Live selection handlers ==================
+  socket.on("selectTicketNumber", ({ userId, stake, number }) => {
+    const game = games[stake];
+    if (!game) return;
+
+    if (!game.selectedNumbers[userId]) game.selectedNumbers[userId] = [];
+    if (!game.selectedNumbers[userId].includes(number)) {
+      game.selectedNumbers[userId].push(number);
+    }
+
+    io.to(`bingo_${stake}`).emit("ticketNumbersUpdated", game.selectedNumbers);
+  });
+
+  socket.on("deselectTicketNumber", ({ userId, stake, oldNumber }) => {
+    const game = games[stake];
+    if (!game || !game.selectedNumbers[userId]) return;
+
+    game.selectedNumbers[userId] = game.selectedNumbers[userId].filter(n => n !== oldNumber);
+    io.to(`bingo_${stake}`).emit("ticketNumbersUpdated", game.selectedNumbers);
+  });
   socket.on("leaveGame", ({ userId, stake } = {}) => {
     if (!userId || !stake || !STAKE_GROUPS.includes(Number(stake))) return;
 
@@ -413,6 +408,7 @@ socket.on("joinGame", ({ userId, username = "Player", stake, ticket } = {}) => {
       if (userData.socketIds.size === 0) {
         game.playersMap.delete(userId);
         delete game.tickets[userId];
+        delete game.selectedNumbers[userId];
       }
     }
 
@@ -443,6 +439,7 @@ socket.on("joinGame", ({ userId, username = "Player", stake, ticket } = {}) => {
           if (data.socketIds.size === 0) {
             game.playersMap.delete(userId);
             delete game.tickets[userId];
+            delete game.selectedNumbers[userId];
           }
           break;
         }
@@ -466,6 +463,7 @@ socket.on("joinGame", ({ userId, username = "Player", stake, ticket } = {}) => {
     socket.emit("error", { message: "Manual bingo call not allowed." });
   });
 });
+
 sequelize
   .sync({ alter: true })
   .then(() => {
