@@ -75,8 +75,62 @@ for (const stake of STAKE_GROUPS) {
   };
 }
 
-function rebuildPlayersArray(stake) {
+
+
+// ===================== BALANCE UPDATE HELPER =====================
+async function updateBalances(stake, winnerId, prize) {
   const game = games[stake];
+  if (!game) return;
+
+  const stakeNum = Number(game.stakePerPlayer) || 0;
+
+  const losers = game.players
+    .map((p) => p.userId)
+    .filter((id) => id !== winnerId);
+
+  try {
+    await sequelize.transaction(async (t) => {
+      // ---- Winner ----
+      const winner = await User.findOne({
+        where: { telegram_id: winnerId },
+        transaction: t,
+      });
+      if (!winner) throw new Error("Winner not found");
+
+      winner.balance = winner.balance - stakeNum + prize;
+      if (winner.balance < 0) winner.balance = 0;
+      await winner.save({ transaction: t });
+
+      io.to(`user_${winner.telegram_id}`).emit("balanceChange", {
+        userId: winner.telegram_id,
+        newBalance: winner.balance,
+      });
+
+      // ---- Losers ----
+      const losersRecords = await User.findAll({
+        where: { telegram_id: losers },
+        transaction: t,
+      });
+
+      for (const loser of losersRecords) {
+        loser.balance = loser.balance - stakeNum;
+        if (loser.balance < 0) loser.balance = 0;
+        await loser.save({ transaction: t });
+
+        io.to(`user_${loser.telegram_id}`).emit("balanceChange", {
+          userId: loser.telegram_id,
+          newBalance: loser.balance,
+        });
+      }
+    });
+  } catch (err) {
+    console.error("❌ updateBalances error:", err);
+  }
+}
+// ================================================================
+
+function rebuildPlayersArray(stake) {
+  const game = games[stake];ss
   game.players = [];
   for (const [userId, data] of game.playersMap.entries()) {
     game.players.push({
