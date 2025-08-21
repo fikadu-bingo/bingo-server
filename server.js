@@ -393,43 +393,43 @@ function generateBingoTicket() {
 io.on("connection", (socket) => {
   console.log(`A user connected: ${socket.id}`);
 
-  socket.on("joinGame", ({ userId, username = "Player", stake, ticket } = {}) => {
-    if (!userId || !stake || !STAKE_GROUPS.includes(Number(stake))) {
-      return socket.emit("error", { message: "joinGame requires valid userId and stake" });
-    }
+ socket.on("joinGame", ({ userId, username = "Player", stake, ticket } = {}) => {
+  if (!userId || !stake || !STAKE_GROUPS.includes(Number(stake))) {
+    return socket.emit("error", { message: "joinGame requires valid userId and stake" });
+  }
 
-    const game = games[stake];
+  const game = games[stake];
 
-    if (game.playersMap.has(userId)) {
-      game.playersMap.get(userId).socketIds.add(socket.id);
-    } else {
-      game.playersMap.set(userId, { username, socketIds: new Set([socket.id]) });
-    }
+  if (game.playersMap.has(userId)) {
+    game.playersMap.get(userId).socketIds.add(socket.id);
+  } else {
+    game.playersMap.set(userId, { username, socketIds: new Set([socket.id]) });
+  }
 
-    if (!ticket || ticket.length !== 5) {
-      ticket = generateBingoTicket();
-    }
-    game.tickets[userId] = ticket;
+  if (!ticket || ticket.length !== 5) {
+    ticket = generateBingoTicket();
+  }
+  game.tickets[userId] = ticket;
 
-    io.to(socket.id).emit("ticketAssigned", { ticket });
+  io.to(socket.id).emit("ticketAssigned", { ticket });
 
-    rebuildPlayersArray(stake);
+  // 👇 this MUST rebuild the actual array of players
+  rebuildPlayersArray(stake);
 
-    socket.join(`bingo_${stake}`);
-    console.log(`✅ User ${userId} (${socket.id}) joined bingo_${stake}`);
+  socket.join(`bingo_${stake}`);
+  console.log(`✅ User ${userId} (${socket.id}) joined bingo_${stake}`);
 
-    broadcastPlayerInfo(stake);
-    broadcastWinAmount(stake);
+  broadcastPlayerInfo(stake);   // updates player count
+  broadcastWinAmount(stake);    // updates prize
 
-    if (game.players.length >= 2 && game.state === "waiting") {
-      startCountdownIfNeeded(stake);
-    } else if (game.state === "countdown") {
-      socket.emit("countdownUpdate", game.currentCountdown);
-    }
+  if (game.players.length >= 2 && game.state === "waiting") {
+    startCountdownIfNeeded(stake);
+  } else if (game.state === "countdown") {
+    socket.emit("countdownUpdate", game.currentCountdown);
+  }
 
-    socket.emit("gameStateUpdate", { state: game.state, countdown: game.currentCountdown });
-  });
-
+  socket.emit("gameStateUpdate", { state: game.state, countdown: game.currentCountdown });
+});
   // ================== Live selection handlers ==================
   socket.on("selectTicketNumber", ({ userId, stake, number }) => {
     const game = games[stake];
