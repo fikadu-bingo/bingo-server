@@ -139,7 +139,6 @@ function startCountdownIfNeeded(stake) {
   game.state = "countdown";
   let counter = typeof game.countdown === "number" ? game.countdown : 50;
   game.currentCountdown = counter;
-
   io.to(`bingo_${stake}`).emit("countdownUpdate", counter);
   game.countdownInterval = setInterval(() => {
     if (game.players.length < 2) {
@@ -397,11 +396,11 @@ io.on("connection", (socket) => {
     game.selectedNumbers[userId] = game.selectedNumbers[userId].filter(n => n !== oldNumber);
     io.to(`bingo_${stake}`).emit("ticketNumbersUpdated", game.selectedNumbers);
   });
+
   socket.on("leaveGame", ({ userId, stake } = {}) => {
     if (!userId || !stake || !STAKE_GROUPS.includes(Number(stake))) return;
 
     const game = games[stake];
-
     if (game.playersMap.has(userId)) {
       const userData = game.playersMap.get(userId);
       userData.socketIds.delete(socket.id);
@@ -430,8 +429,7 @@ io.on("connection", (socket) => {
 
   socket.on("disconnect", () => {
     console.log(`User disconnected: ${socket.id}`);
-
-    for (const stake of STAKE_GROUPS) {
+ for (const stake of STAKE_GROUPS) {
       const game = games[stake];
       for (const [userId, data] of game.playersMap.entries()) {
         if (data.socketIds.has(socket.id)) {
