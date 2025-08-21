@@ -130,7 +130,7 @@ async function updateBalances(stake, winnerId, prize) {
 // ================================================================
 
 function rebuildPlayersArray(stake) {
-  const game = games[stake];ss
+  const game = games[stake];
   game.players = [];
   for (const [userId, data] of game.playersMap.entries()) {
     game.players.push({
