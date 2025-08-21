@@ -457,9 +457,36 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("bingoWin", () => {
-    socket.emit("error", { message: "Manual bingo call not allowed." });
+ socket.on("bingoWin", async ({ userId, stake, ticket }) => {
+  const game = games[stake];
+  if (!game || !game.tickets[userId]) {
+    return socket.emit("error", { message: "Invalid user or game" });
+  }
+
+  const numbersCalled = game.numbersCalled;
+  const isWinner = checkBingo(ticket, numbersCalled);
+
+  if (!isWinner) {
+    return socket.emit("bingoFail", { message: "Your Bingo claim is invalid!" });
+  }
+
+  game.state = "ended";
+  stopCallingNumbers(stake);
+  stopAndResetCountdown(stake);
+
+  const stakeNum = Number(game.stakePerPlayer) || 0;
+  const totalStake = stakeNum * game.players.length;
+  const prize = Math.floor(totalStake * 0.8);
+
+  io.to(`bingo_${stake}`).emit("gameWon", {
+    userId,
+    username: game.playersMap.get(userId)?.username,
+    prize
   });
+
+  await updateBalances(stake, userId, prize); // Move the balance update logic into a separate helper
+  setTimeout(() => resetGame(stake), 15000);
+});
 });
 
 sequelize
