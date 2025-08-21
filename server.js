@@ -480,7 +480,7 @@ socket.on("bingoWin", async ({ userId, stake, ticket }) => {
     const totalStake = stakeNum * game.players.length;
     const prize = Math.floor(totalStake * 0.8);
 
-    io.to(bingo_${stake}).emit("gameWon", {
+    io.to(`bingo_${stake}`).emit("gameWon", {
       userId,
       username: game.playersMap.get(userId)?.username,
       prize
