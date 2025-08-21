@@ -282,7 +282,7 @@ function startCallingNumbers(stake) {
     game.numbersCalled.push(newNumber);
     io.to(`bingo_${stake}`).emit("numberCalled", newNumber);
 
-    await checkForWinner(stake);
+    //await checkForWinner(stake);
   }, 3000);
 }
 
