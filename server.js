@@ -451,6 +451,38 @@ io.on("connection", (socket) => {
     io.to(`bingo_${stake}`).emit("ticketNumbersUpdated", game.selectedNumbers);
   });
 
+  socket.on("refreshGame", ({ userId, stake }) => {
+  const game = games[stake];
+  if (!game) {
+    return socket.emit("error", { message: "No active game found" });
+  }
+
+  // Resend their assigned ticket
+  if (game.tickets[userId]) {
+    socket.emit("ticketAssigned", { ticket: game.tickets[userId] });
+  }
+
+  // Resend numbers they already selected
+  if (game.selectedNumbers[userId]) {
+    socket.emit("ticketNumbersUpdated", game.selectedNumbers);
+  }
+
+  // Resend game state (waiting, countdown, playing)
+  socket.emit("gameStateUpdate", {
+    state: game.state,
+    countdown: game.currentCountdown,
+  });
+
+  // Resend current called numbers (so they can catch up)
+  socket.emit("calledNumbersUpdate", game.calledNumbers || []);
+
+  // Resend player info + win amount
+  broadcastPlayerInfo(stake);
+  broadcastWinAmount(stake);
+
+  console.log(`🔄 User ${userId} refreshed in stake ${stake}`);
+});
+
   socket.on("leaveGame", ({ userId, stake } = {}) => {
     if (!userId || !stake || !STAKE_GROUPS.includes(Number(stake))) return;
 
