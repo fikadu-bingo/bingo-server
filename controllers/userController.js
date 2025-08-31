@@ -167,39 +167,56 @@ exports.approveCashout = async (req, res) => {
 };
 
 // ==============================
-// ✅ Transfer Handler (unchanged)
+// Transfer Handler (updated with transaction & phone number support)
 // ==============================
 exports.transfer = async (req, res) => {
-  const { from_telegram_id, to_telegram_id, amount } = req.body;
+  const { sender_telegram_id, receiver_phone_number, amount } = req.body;
 
-  if (!from_telegram_id || !to_telegram_id || !amount || amount <= 0) {
+  if (!sender_telegram_id || !receiver_phone_number || !amount || amount <= 0) {
     return res.status(400).json({ message: "Invalid request" });
   }
 
-  try {
-    const sender = await User.findOne({ where: { telegram_id: String(from_telegram_id) } });
-    const receiver = await User.findOne({ where: { telegram_id: String(to_telegram_id) } });
+  const t = await User.sequelize.transaction();
 
-    if (!sender || !receiver) {
-      return res.status(404).json({ message: "Sender or receiver not found" });
+  try {
+    const sender = await User.findOne({ 
+      where: { telegram_id: String(sender_telegram_id) }, 
+      transaction: t 
+    });
+    if (!sender) {
+      await t.rollback();
+      return res.status(404).json({ message: "Sender not found" });
+    }
+
+    const receiver = await User.findOne({ 
+      where: { phone_number: receiver_phone_number }, 
+      transaction: t 
+    });
+    if (!receiver) {
+      await t.rollback();
+      return res.status(404).json({ message: "Receiver not found" });
     }
 
     if (sender.balance < amount) {
+      await t.rollback();
       return res.status(400).json({ message: "Insufficient balance" });
     }
 
+    // Deduct from sender, add to receiver
     sender.balance -= amount;
     receiver.balance += amount;
 
-    await sender.save();
-    await receiver.save();
+    await sender.save({ transaction: t });
+    await receiver.save({ transaction: t });
+
+    await t.commit();
 
     res.status(200).json({
-      message: "Transfer successful",
-      senderBalance: sender.balance,
-      receiverBalance: receiver.balance,
+      message: `Successfully transferred Br.${amount} to ${receiver.phone_number}`,
+      newBalance: sender.balance,
     });
   } catch (error) {
+    await t.rollback();
     console.error("Transfer error:", error);
     res.status(500).json({ message: "Internal server error" });
   }
