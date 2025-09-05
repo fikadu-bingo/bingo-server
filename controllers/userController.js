@@ -1,4 +1,4 @@
-const { User, Deposit, Cashout } = require("../models");
+const { User, Deposit, Cashout, Transaction } = require("../models");
 const { v4: uuidv4 } = require("uuid");
 const cloudinary = require("../cloudinary"); // ✅ Cloudinary config
 
@@ -74,6 +74,13 @@ exports.deposit = async (req, res) => {
       date: new Date(),
       status: "pending",
     });
+    await Transaction.create({
+  type: "deposit",
+  amount: parseFloat(amount),
+  status: "pending",
+  userId: user.id,
+  date: new Date(),
+});
 
     console.log("✅ Deposit successfully saved to DB");
     return res.status(201).json({ message: "Deposit request created" });
@@ -128,6 +135,15 @@ exports.cashout = async (req, res) => {
       status: "pending",
       date: new Date(),
     }, { transaction: t });
+
+    // 🔹 Record transaction for cashout
+await Transaction.create({
+  type: "cashout",
+  amount: parseFloat(amount),
+  status: "pending",
+  userId: user.id,
+  date: new Date(),
+}, { transaction: t });
 
     await t.commit();
 
@@ -208,6 +224,24 @@ exports.transfer = async (req, res) => {
 
     await sender.save({ transaction: t });
     await receiver.save({ transaction: t });
+
+    // Sender transaction (deduction)
+await Transaction.create({
+  type: "transfer",
+  amount: parseFloat(amount),
+  status: "completed",
+  userId: sender.id,
+  date: new Date(),
+});
+
+// Receiver transaction (addition)
+await Transaction.create({
+  type: "transfer",
+  amount: parseFloat(amount),
+  status: "completed",
+  userId: receiver.id,
+  date: new Date(),
+});
 
     await t.commit();
 
