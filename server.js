@@ -251,7 +251,8 @@ async function checkForWinner(stake) {
       io.to(`bingo_${stake}`).emit("gameWon", {
         userId: player.userId,
         username: player.username,
-        prize
+        prize,
+         winnerCartela: game.tickets[player.userId], // <-- include winner's cartela
       });
 
       stopCallingNumbers(stake);
@@ -569,7 +570,8 @@ socket.on("bingoWin", async ({ userId, stake, ticket }) => {
     io.to(`bingo_${stake}`).emit("gameWon", {
       userId,
       username: game.playersMap.get(userId)?.username,
-      prize
+      prize,
+      winnerCartela: game.tickets[userId], // <-- include winner's cartela
     });
 
     if (typeof updateBalances === "function") {
