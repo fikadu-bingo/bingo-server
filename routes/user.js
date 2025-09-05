@@ -10,6 +10,7 @@ const {
 
 const { User } = require("../models");
 const cloudinary = require("../cloudinary"); // ✅ Cloudinary config
+const { Transaction } = require("../models");
 
 const router = express.Router();
 
@@ -96,5 +97,34 @@ router.get("/check/:telegram_id", async (req, res) => {
 // Get username & profile picture for frontend HomePage
 // ------------------------------
 router.get("/me", getMe);
+
+// ------------------------------
+// GET user transaction history
+// ------------------------------
+
+
+router.get("/transactions", async (req, res) => {
+  try {
+    const { telegram_id } = req.query;
+    if (!telegram_id) {
+      return res.status(400).json({ error: "telegram_id is required" });
+    }
+
+    const user = await User.findOne({ where: { telegram_id } });
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const transactions = await Transaction.findAll({
+      where: { userId: user.id },
+      order: [["date", "DESC"]],
+    });
+
+    res.json({ transactions });
+  } catch (err) {
+    console.error("Error fetching transactions:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
 
 module.exports = router;
