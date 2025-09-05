@@ -6,8 +6,10 @@ const Ticket = require("./Ticket");
 const Deposit = require("./deposit");
 const Cashout = require("./cashout");
 const CalledNumber = require("./CalledNumber");
-const Promocode = require('./promocode');
-// Define associations if needed
+const Promocode = require("./promocode");
+const Transaction = require("./Transaction")(sequelize, require("sequelize").DataTypes);
+
+// Define associations
 User.hasMany(Ticket, { foreignKey: "user_id" });
 Ticket.belongsTo(User, { foreignKey: "user_id" });
 
@@ -17,15 +19,19 @@ Deposit.belongsTo(User, { foreignKey: "user_id" });
 User.hasMany(Cashout, { foreignKey: "user_id" });
 Cashout.belongsTo(User, { foreignKey: "user_id" });
 
+User.hasMany(Transaction, { foreignKey: "userId" });
+Transaction.belongsTo(User, { foreignKey: "userId", as: "user" });
+
 // Export all models
 module.exports = {
   sequelize,
   User,
-   Agent,
+  Agent,
   Game,
   Ticket,
   Deposit,
   Cashout,
   CalledNumber,
-   Promocode
+  Promocode,
+  Transaction,
 };
