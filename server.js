@@ -558,21 +558,23 @@ socket.on("disconnect", () => {
     }
   }
 });
-socket.on("bingoWin", async ({ userId, stake, ticket }) => {
+socket.on("bingoWin", async ({ userId, stake }) => {
   try {
     const game = games[stake];
-    if (!game) return socket.emit("error", { message: "Game not found" });
-    if (!userId || !ticket || !game.tickets[userId]) {
-      return socket.emit("error", { message: "Invalid Bingo request" });
+    if (!game || !game.tickets[userId]) {
+      return socket.emit("error", { message: "Game not found or invalid ticket" });
     }
 
+    // Use server-stored ticket
+    const ticket = game.tickets[userId]; 
     const numbersCalled = game.numbersCalled;
-    const isWinner = checkBingo(ticket, numbersCalled);
+    const isWinner = checkBingo(ticket.grid, numbersCalled);
 
     if (!isWinner) {
       return socket.emit("bingoFail", { message: "Your Bingo claim is invalid!" });
     }
 
+    // Proceed to end the game, calculate prize, update balances, emit gameWon
     game.state = "ended";
     stopCallingNumbers(stake);
     stopAndResetCountdown(stake);
@@ -585,13 +587,11 @@ socket.on("bingoWin", async ({ userId, stake, ticket }) => {
       userId,
       username: game.playersMap.get(userId)?.username,
       prize,
-      winnerCartela: game.tickets[userId].grid, // <-- include winner's cartela
-      cartelaNumber:game.tickets[userId].cartelaNumber,
+      winnerCartela: ticket.grid,
+      cartelaNumber: ticket.cartelaNumber,
     });
 
-    if (typeof updateBalances === "function") {
-      await updateBalances(stake, userId, prize);
-    }
+    await updateBalances(stake, userId, prize);
 
     setTimeout(() => resetGame(stake), 15000);
   } catch (err) {
