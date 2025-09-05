@@ -253,7 +253,7 @@ async function checkForWinner(stake) {
         username: player.username,
         prize,
          winnerCartela: game.tickets[player.userId].grid, // <-- include winner's cartela
-         cartelaNumber:game.tickets[player.userId]?.cartelaNumber,
+         cartelaNumber:game.tickets[player.userId].cartelaNumber,
       });
 
       stopCallingNumbers(stake);
@@ -368,9 +368,9 @@ function resetGame(stake) {
   io.to(`bingo_${stake}`).emit("gameReset");
 }
 
-// ✅ Fixed Bingo ticket generator (row-major)
+// ✅ Fixed Bingo ticket generator
 function generateBingoTicket() {
-  const ticket = Array.from({ length: 5 }, () => Array(5).fill(0));
+  const grid = Array.from({ length: 5 }, () => Array(5).fill(0));
   const ranges = [
     [1, 15], [16, 30], [31, 45], [46, 60], [61, 75],
   ];
@@ -382,20 +382,22 @@ function generateBingoTicket() {
       if (!nums.includes(n)) nums.push(n);
     }
     nums.sort((a, b) => a - b);
-
     for (let row = 0; row < 5; row++) {
-      ticket[row][col] = nums[row];
+      grid[row][col] = nums[row];
     }
   }
 
-  ticket[2][2] = "★"; // free space
-  return ticket;
+  grid[2][2] = "★"; // free space
+  return {
+    grid,
+    cartelaNumber: Math.floor(Math.random() * 1000000), // unique cartela number
+  };
 }
 
 io.on("connection", (socket) => {
   console.log(`A user connected: ${socket.id}`);
 
- socket.on("joinGame", ({ userId, username = "Player", stake, ticket } = {}) => {
+socket.on("joinGame", ({ userId, username = "Player", stake, ticket } = {}) => {
   if (!userId || !stake || !STAKE_GROUPS.includes(Number(stake))) {
     return socket.emit("error", { message: "joinGame requires valid userId and stake" });
   }
@@ -408,21 +410,21 @@ io.on("connection", (socket) => {
     game.playersMap.set(userId, { username, socketIds: new Set([socket.id]) });
   }
 
-  if (!ticket || ticket.length !== 5) {
+  // Assign ticket properly
+  if (!ticket || !ticket.grid) {
     ticket = generateBingoTicket();
   }
   game.tickets[userId] = ticket;
 
-  io.to(socket.id).emit("ticketAssigned", { ticket });
+  // Send only grid & cartelaNumber to the client
+  io.to(socket.id).emit("ticketAssigned", { ticket: ticket.grid, cartelaNumber: ticket.cartelaNumber });
 
-  // 👇 this MUST rebuild the actual array of players
   rebuildPlayersArray(stake);
-
   socket.join(`bingo_${stake}`);
   console.log(`✅ User ${userId} (${socket.id}) joined bingo_${stake}`);
 
-  broadcastPlayerInfo(stake);   // updates player count
-  broadcastWinAmount(stake);    // updates prize
+  broadcastPlayerInfo(stake);
+  broadcastWinAmount(stake);
 
   if (game.players.length >= 2 && game.state === "waiting") {
     startCountdownIfNeeded(stake);
@@ -572,7 +574,8 @@ socket.on("bingoWin", async ({ userId, stake, ticket }) => {
       userId,
       username: game.playersMap.get(userId)?.username,
       prize,
-      winnerCartela: game.tickets[userId], // <-- include winner's cartela
+      winnerCartela: game.tickets[userId].grid, // <-- include winner's cartela
+      cartelaNumber:game.tickets[userId].cartelaNumber,
     });
 
     if (typeof updateBalances === "function") {
