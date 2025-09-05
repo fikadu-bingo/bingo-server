@@ -410,14 +410,20 @@ socket.on("joinGame", ({ userId, username = "Player", stake, ticket } = {}) => {
     game.playersMap.set(userId, { username, socketIds: new Set([socket.id]) });
   }
 
-  // Assign ticket properly
-  if (!ticket || !ticket.grid) {
-    ticket = generateBingoTicket();
+  // Only assign ticket if the user doesn’t already have one
+  if (!game.tickets[userId]) {
+    if (!ticket || !ticket.grid) {
+      ticket = generateBingoTicket();
+    }
+    game.tickets[userId] = ticket;
   }
-  game.tickets[userId] = ticket;
 
   // Send only grid & cartelaNumber to the client
-  io.to(socket.id).emit("ticketAssigned", { ticket: ticket.grid, cartelaNumber: ticket.cartelaNumber });
+  const assignedTicket = game.tickets[userId];
+  io.to(socket.id).emit("ticketAssigned", { 
+    ticket: assignedTicket.grid, 
+    cartelaNumber: assignedTicket.cartelaNumber 
+  });
 
   rebuildPlayersArray(stake);
   socket.join(`bingo_${stake}`);
@@ -516,37 +522,42 @@ socket.on("joinGame", ({ userId, username = "Player", stake, ticket } = {}) => {
       resetGame(stake);
     }
   });
+socket.on("disconnect", () => {
+  console.log(`User disconnected: ${socket.id}`);
 
-  socket.on("disconnect", () => {
-    console.log(`User disconnected: ${socket.id}`);
- for (const stake of STAKE_GROUPS) {
-      const game = games[stake];
-      for (const [userId, data] of game.playersMap.entries()) {
-        if (data.socketIds.has(socket.id)) {
-          data.socketIds.delete(socket.id);
-          if (data.socketIds.size === 0) {
-            game.playersMap.delete(userId);
-            delete game.tickets[userId];
-            delete game.selectedNumbers[userId];
-          }
-          break;
+  for (const stake of STAKE_GROUPS) {
+    const game = games[stake];
+    for (const [userId, data] of game.playersMap.entries()) {
+      if (data.socketIds.has(socket.id)) {
+        data.socketIds.delete(socket.id);
+
+        if (data.socketIds.size === 0) {
+          // Delay actual removal to handle quick reconnects
+          setTimeout(() => {
+            // If user hasn't reconnected within grace period
+            if (!data.socketIds || data.socketIds.size === 0) {
+              game.playersMap.delete(userId);
+              delete game.tickets[userId];
+              delete game.selectedNumbers[userId];
+              rebuildPlayersArray(stake);
+
+              if (game.players.length < 2 && game.countdownInterval) {
+                stopAndResetCountdown(stake);
+              }
+              if (game.players.length === 0) {
+                resetGame(stake);
+              } else {
+                broadcastPlayerInfo(stake);
+                broadcastWinAmount(stake);
+              }
+            }
+          }, 5000); // 5 sec grace period
         }
-      }
-
-      rebuildPlayersArray(stake);
-
-      if (game.players.length < 2 && game.countdownInterval) {
-        stopAndResetCountdown(stake);
-      }
-      if (game.players.length === 0) {
-        resetGame(stake);
-      } else {
-        broadcastPlayerInfo(stake);
-        broadcastWinAmount(stake);
+        break;
       }
     }
-  });
-
+  }
+});
 socket.on("bingoWin", async ({ userId, stake, ticket }) => {
   try {
     const game = games[stake];
