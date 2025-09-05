@@ -201,7 +201,7 @@ function startCountdownIfNeeded(stake) {
       game.state = "waiting";
       game.countdown = 50;
       game.currentCountdown = 50;
-      io.to(`bingo_${stake}`).emit("countdownStopped", game.currentCountdown);
+      io.to(`bingo_${stake}`).emit("countdownStopped");
       return;
     }
     counter -= 1;
@@ -364,7 +364,7 @@ function resetGame(stake) {
   game.currentCountdown = 50;
   game.selectedNumbers = {};
 
-  io.to(`bingo_${stake}`).emit("stakePlayerCount", { gameId: `bingo_${stake}`, count: 0 });
+  io.to(`bingo_${stake}`).emit("playerCountUpdate", game.players.length);
   io.to(`bingo_${stake}`).emit("gameReset");
 }
 
