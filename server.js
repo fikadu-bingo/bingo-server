@@ -252,7 +252,7 @@ async function checkForWinner(stake) {
         userId: player.userId,
         username: player.username,
         prize,
-         winnerCartela: game.tickets[player.userId], // <-- include winner's cartela
+         winnerCartela: game.tickets[player.userId].grid, // <-- include winner's cartela
          cartelaNumber:game.tickets[player.userId]?.cartelaNumber,
       });
 
