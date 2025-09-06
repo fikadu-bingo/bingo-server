@@ -275,7 +275,8 @@ io.on("connection", (socket) => {
     }
 
     if (!ticket || ticket.length !== 5) ticket = generateBingoTicket();
-    game.tickets[userId] = ticket;
+     ticket.cartelaNumber = Math.floor(Math.random() * 1000000); // unique identifier
+    game.tickets[userId] = {grid:ticket,cartelaNumber};
 
     io.to(socket.id).emit("ticketAssigned", { ticket });
     rebuildPlayersArray(stake);
@@ -362,38 +363,53 @@ io.on("connection", (socket) => {
     }
   });
 
-  // ---------------- BINGO WIN ----------------
-  socket.on("bingoWin", async ({ userId, stake, ticket }) => {
-    try {
-      const game = games[stake];
-      if (!game) return socket.emit("error", { message: "Game not found" });
-      if (!userId || !ticket || !game.tickets[userId]) return socket.emit("error", { message: "Invalid Bingo request" });
+// ---------------- BINGO WIN ----------------
+socket.on("bingoWin", async ({ userId, stake, ticket }) => {
+  try {
+    const game = games[stake];
+    if (!game) return socket.emit("error", { message: "Game not found" });
+    if (!userId || !ticket || !game.tickets[userId])
+      return socket.emit("error", { message: "Invalid Bingo request" });
 
-      const isWinner = checkBingo(ticket, game.numbersCalled);
-      if (!isWinner) return socket.emit("bingoFail", { message: "Your Bingo claim is invalid!" });
+    const isWinner = checkBingo(ticket, game.numbersCalled);
+    if (!isWinner)
+      return socket.emit("bingoFail", { message: "Your Bingo claim is invalid!" });
 
-      game.state = "ended";
-      stopCallingNumbers(stake);
-      stopAndResetCountdown(stake);
+    game.state = "ended";
+    stopCallingNumbers(stake);
+    stopAndResetCountdown(stake);
 
-      const stakeNum = Number(game.stakePerPlayer) || 0;
-      const totalStake = stakeNum * game.players.length;
-      const prize = Math.floor(totalStake * 0.8);
+    const stakeNum = Number(game.stakePerPlayer) || 0;
+    const totalStake = stakeNum * game.players.length;
+    const prize = Math.floor(totalStake * 0.8);
 
-      io.to(`bingo_${stake}`).emit("gameWon", {
-        userId,
-        username: game.playersMap.get(userId)?.username,
-        prize,
-        winnerCartela: game.tickets[userId],
-      });
+    // Get the numbers the player actually selected
+    const playerSelected = game.selectedNumbers[userId] || [];
 
-      await updateBalances(stake, userId, prize);
-      setTimeout(() => resetGame(stake), 15000);
-    } catch (err) {
-      console.error("Error in bingoWin:", err);
-      socket.emit("error", { message: "Server error processing Bingo" });
-    }
-  });
+    io.to(`bingo_${stake}`).emit("gameWon", {
+      userId,
+      username: game.playersMap.get(userId)?.username,
+      prize,
+      winnerCartela: game.tickets[userId].map((row, rowIndex) =>
+        row.map((cell, colIndex) => ({
+          num: cell === "★" ? null : cell,
+          marked: cell === "★" || playerSelected.includes(cell),
+          isCenter: rowIndex === 2 && colIndex === 2,
+        }))
+      ),
+      cartelaNumber: game.tickets[userId]?.cartelaNumber,
+    });
+
+    // Update balances for winner and losers
+    await updateBalances(stake, userId, prize);
+
+    // Reset game after 15 seconds
+    setTimeout(() => resetGame(stake), 15000);
+  } catch (err) {
+    console.error("Error in bingoWin:", err);
+    socket.emit("error", { message: "Server error processing Bingo" });
+  }
+});
 });
 
 // ==================== START SERVER ====================
